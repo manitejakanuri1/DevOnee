@@ -1,0 +1,214 @@
+-- Enable the pgvector extension first!
+create extension if not exists vector with schema public;
+
+-- Drop tables if they exist to allow clean recreation
+drop table if exists feedback cascade;
+drop table if exists health_scores cascade;
+drop table if exists contributions cascade;
+drop table if exists chats cascade;
+drop table if exists onboarding_plans cascade;
+drop table if exists embeddings cascade;
+drop table if exists repositories cascade;
+drop table if exists community_insights cascade;
+drop table if exists achievements cascade;
+drop table if exists prompts cascade;
+drop table if exists usage cascade;
+drop table if exists team_members cascade;
+drop table if exists organizations cascade;
+drop table if exists profiles cascade;
+
+-- Profiles
+create table profiles (
+  id uuid references auth.users on delete cascade primary key,
+  user_id text unique, -- for NextAuth alignment or custom user_id string
+  guest_id text unique,
+  name text,
+  email text,
+  image text,
+  created_at timestamptz default now()
+);
+
+-- Organizations
+create table organizations (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  created_at timestamptz default now()
+);
+
+-- Team Members
+create table team_members (
+  id uuid default gen_random_uuid() primary key,
+  organization_id uuid references organizations(id) on delete cascade not null,
+  profile_id uuid references profiles(id) on delete cascade not null,
+  role text default 'member',
+  created_at timestamptz default now(),
+  unique(organization_id, profile_id)
+);
+
+-- Usage tracking for usage limits
+create table usage (
+  id uuid default gen_random_uuid() primary key,
+  identifier text not null, -- user_id or guest_id
+  endpoint text not null,
+  count int default 0,
+  date date default current_date,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(identifier, endpoint, date)
+);
+
+-- Prompts
+create table prompts (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references profiles(id) on delete cascade,
+  guest_id text,
+  content text not null,
+  response text,
+  created_at timestamptz default now()
+);
+
+-- Achievements
+create table achievements (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references profiles(id) on delete cascade not null,
+  title text not null,
+  description text,
+  earned_at timestamptz default now()
+);
+
+-- Community Insights
+create table community_insights (
+  id uuid default gen_random_uuid() primary key,
+  title text not null,
+  content text not null,
+  author_id uuid references profiles(id) on delete set null,
+  created_at timestamptz default now()
+);
+
+-- Repositories
+create table repositories (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references profiles(id) on delete cascade not null,
+  name text not null,
+  url text not null,
+  summary text,
+  created_at timestamptz default now()
+);
+
+-- Embeddings
+create table embeddings (
+  id uuid default gen_random_uuid() primary key,
+  repository_id uuid references repositories(id) on delete cascade not null,
+  content text not null,
+  embedding vector(768), -- Gemini text-embedding-004 outputs 768 dimensions
+  created_at timestamptz default now()
+);
+
+-- Onboarding Plans
+create table onboarding_plans (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references profiles(id) on delete cascade,
+  guest_id text,
+  plan_data jsonb not null,
+  created_at timestamptz default now()
+);
+
+-- Chats
+create table chats (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references profiles(id) on delete cascade,
+  guest_id text,
+  title text,
+  created_at timestamptz default now()
+);
+
+-- Contributions
+create table contributions (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references profiles(id) on delete cascade not null,
+  repository_id uuid references repositories(id) on delete cascade not null,
+  pr_url text,
+  status text,
+  created_at timestamptz default now()
+);
+
+-- Health Scores
+create table health_scores (
+  id uuid default gen_random_uuid() primary key,
+  repository_id uuid references repositories(id) on delete cascade not null,
+  score int not null,
+  metrics jsonb,
+  created_at timestamptz default now()
+);
+
+-- Feedback
+create table feedback (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references profiles(id) on delete set null,
+  guest_id text,
+  message text not null,
+  created_at timestamptz default now()
+);
+
+-- Indexes for performance
+create index idx_usage_identifier_date on usage(identifier, date);
+create index idx_prompts_profile_id on prompts(profile_id);
+create index idx_prompts_guest_id on prompts(guest_id);
+create index idx_onboarding_plans_profile_id on onboarding_plans(profile_id);
+create index idx_onboarding_plans_guest_id on onboarding_plans(guest_id);
+create index idx_chats_profile_id on chats(profile_id);
+create index idx_chats_guest_id on chats(guest_id);
+create index idx_team_members_profile_id on team_members(profile_id);
+
+-- Enable RLS across all tables
+alter table profiles enable row level security;
+alter table organizations enable row level security;
+alter table team_members enable row level security;
+alter table usage enable row level security;
+alter table prompts enable row level security;
+alter table achievements enable row level security;
+alter table community_insights enable row level security;
+alter table repositories enable row level security;
+alter table embeddings enable row level security;
+alter table onboarding_plans enable row level security;
+alter table chats enable row level security;
+alter table contributions enable row level security;
+alter table health_scores enable row level security;
+alter table feedback enable row level security;
+
+-- Example: RLS Policies for Profiles
+create policy "Users can view their own profile" on profiles
+  for select using (auth.uid() = id);
+
+create policy "Users can update their own profile" on profiles
+  for update using (auth.uid() = id);
+
+-- Example: RLS Policies for Prompts (Handling guest vs authenticated)
+create policy "Users and guests can view their own prompts" on prompts
+  for select using (
+    profile_id = auth.uid()
+    or (guest_id is not null and guest_id = current_setting('request.jwt.claims', true)::json->>'guest_id')
+  );
+
+create policy "Users and guests can insert their own prompts" on prompts
+  for insert with check (
+    profile_id = auth.uid()
+    or (guest_id is not null and guest_id = current_setting('request.jwt.claims', true)::json->>'guest_id')
+  );
+
+-- For organizations and team members, checking membership
+create policy "Members can view their organizations" on organizations
+  for select using (
+    exists (
+      select 1 from team_members
+      where team_members.organization_id = organizations.id
+      and team_members.profile_id = auth.uid()
+    )
+  );
+
+-- Usage tracking policy: admin inserts via service role, select for users
+create policy "Users can view their own usage" on usage
+  for select using (
+    identifier = auth.uid()::text
+    or identifier = current_setting('request.jwt.claims', true)::json->>'guest_id'
+  );
