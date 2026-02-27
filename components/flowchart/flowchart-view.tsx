@@ -9,16 +9,14 @@ import {
     BackgroundVariant,
     useNodesState,
     useEdgesState,
+    MarkerType,
     type Node,
     type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import Dagre from '@dagrejs/dagre';
-import {
-    Loader2, AlertCircle, Network, FileCode, FolderTree,
-    MousePointerClick, X,
-} from 'lucide-react';
-import { CustomFileNode } from './custom-node';
+import { Loader2, AlertCircle, Network, X } from 'lucide-react';
+import { CustomFileNode, FolderGroupNode } from './custom-node';
 
 interface FlowchartViewProps {
     owner: string;
@@ -32,7 +30,7 @@ interface FlowchartStats {
     resolvedEdges: number;
 }
 
-// Entry-point filenames
+/* ── Entry-point filenames ── */
 const ENTRY_NAMES = new Set([
     'index.ts', 'index.tsx', 'index.js', 'index.jsx',
     'page.ts', 'page.tsx', 'page.js', 'page.jsx',
@@ -43,94 +41,131 @@ const ENTRY_NAMES = new Set([
     'server.ts', 'server.js',
 ]);
 
-// Register custom node type (outside component to prevent re-renders)
-const nodeTypes = { custom: CustomFileNode };
+/* ── Legend colors (matches the prototype) ── */
+const LEGEND: { label: string; color: string }[] = [
+    { label: '.tsx/.ts', color: '#3178c6' },
+    { label: '.js', color: '#f1e05a' },
+    { label: '.css', color: '#e44d96' },
+    { label: '.py', color: '#3572A5' },
+    { label: '.json', color: '#40a02b' },
+    { label: 'config', color: '#f59e0b' },
+];
 
-// ── Dagre layout ──
+/* ── Register node types (outside component) ── */
+const nodeTypes = { custom: CustomFileNode, folder: FolderGroupNode };
+
+/* ── Dagre layout ── */
 function applyDagreLayout(
     rawNodes: Node[],
     rawEdges: Edge[],
     direction: 'TB' | 'LR' = 'TB'
 ): { nodes: Node[]; edges: Edge[] } {
     const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-    g.setGraph({ rankdir: direction, nodesep: 60, ranksep: 90, edgesep: 25 });
+    g.setGraph({ rankdir: direction, nodesep: 70, ranksep: 100, edgesep: 30 });
 
-    rawNodes.forEach(node => {
-        g.setNode(node.id, { width: 210, height: 90 });
-    });
-
-    rawEdges.forEach(edge => {
-        g.setEdge(edge.source, edge.target);
-    });
+    rawNodes.forEach(n => g.setNode(n.id, { width: 200, height: 85 }));
+    rawEdges.forEach(e => g.setEdge(e.source, e.target));
 
     Dagre.layout(g);
 
-    const layoutNodes = rawNodes.map(node => {
-        const dagreNode = g.node(node.id);
-        return {
-            ...node,
-            position: {
-                x: dagreNode.x - 105,
-                y: dagreNode.y - 45,
-            },
-        };
-    });
-
-    return { nodes: layoutNodes, edges: rawEdges };
+    return {
+        nodes: rawNodes.map(n => {
+            const d = g.node(n.id);
+            return { ...n, position: { x: d.x - 100, y: d.y - 42 } };
+        }),
+        edges: rawEdges,
+    };
 }
 
-// ── Detect entry points ──
+/* ── Detect entry points ── */
 function detectEntryPoints(nodes: Node[], edges: Edge[]): Set<string> {
-    const entryIds = new Set<string>();
-
-    // Build incoming-edge count
-    const incomingCount = new Map<string, number>();
-    nodes.forEach(n => incomingCount.set(n.id, 0));
+    const ids = new Set<string>();
+    const incoming = new Map<string, number>();
+    const outgoing = new Map<string, number>();
+    nodes.forEach(n => { incoming.set(n.id, 0); outgoing.set(n.id, 0); });
     edges.forEach(e => {
-        incomingCount.set(e.target, (incomingCount.get(e.target) || 0) + 1);
+        incoming.set(e.target, (incoming.get(e.target) || 0) + 1);
+        outgoing.set(e.source, (outgoing.get(e.source) || 0) + 1);
     });
-
-    // Build outgoing-edge count
-    const outgoingCount = new Map<string, number>();
-    nodes.forEach(n => outgoingCount.set(n.id, 0));
-    edges.forEach(e => {
-        outgoingCount.set(e.source, (outgoingCount.get(e.source) || 0) + 1);
+    nodes.forEach(n => {
+        const name = ((n.data as any)?.label || '').split('/').pop() || '';
+        if (ENTRY_NAMES.has(name)) { ids.add(n.id); return; }
+        if ((incoming.get(n.id) || 0) === 0 && (outgoing.get(n.id) || 0) > 0) ids.add(n.id);
     });
-
-    nodes.forEach(node => {
-        const data = node.data as any;
-        const fileName = (data?.label || '').split('/').pop() || '';
-
-        // Check filename match
-        if (ENTRY_NAMES.has(fileName)) {
-            entryIds.add(node.id);
-            return;
-        }
-
-        // Check: no incoming edges but has outgoing edges (root of a dependency tree)
-        const incoming = incomingCount.get(node.id) || 0;
-        const outgoing = outgoingCount.get(node.id) || 0;
-        if (incoming === 0 && outgoing > 0) {
-            entryIds.add(node.id);
-        }
-    });
-
-    return entryIds;
+    return ids;
 }
 
+/* ── Compute folder groups from laid-out nodes ── */
+function computeFolderGroups(nodes: Node[]): Node[] {
+    const PAD = 30;
+    const groups = new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>();
+
+    nodes.forEach(n => {
+        const path = (n.data as any)?.fullPath || '';
+        const parts = path.split('/');
+        if (parts.length < 2) return;
+        // Use the first meaningful directory segment(s)
+        let folder = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+            const seg = parts[i];
+            if (!seg || seg === '.') continue;
+            folder = folder ? folder + '/' + seg : seg;
+        }
+        if (!folder) return;
+
+        const x = n.position.x;
+        const y = n.position.y;
+        const cur = groups.get(folder);
+        if (cur) {
+            cur.minX = Math.min(cur.minX, x);
+            cur.minY = Math.min(cur.minY, y);
+            cur.maxX = Math.max(cur.maxX, x + 200);
+            cur.maxY = Math.max(cur.maxY, y + 85);
+        } else {
+            groups.set(folder, { minX: x, minY: y, maxX: x + 200, maxY: y + 85 });
+        }
+    });
+
+    const folderNodes: Node[] = [];
+    groups.forEach((bounds, folder) => {
+        // Only show groups with meaningful size
+        const w = bounds.maxX - bounds.minX + PAD * 2;
+        const h = bounds.maxY - bounds.minY + PAD * 2;
+        if (w < 100 || h < 60) return;
+
+        folderNodes.push({
+            id: `folder-${folder}`,
+            type: 'folder',
+            position: { x: bounds.minX - PAD, y: bounds.minY - PAD },
+            data: {
+                label: folder.toUpperCase(),
+                w,
+                h,
+            },
+            selectable: false,
+            draggable: false,
+            style: { zIndex: -1 },
+        });
+    });
+
+    return folderNodes;
+}
+
+/* ═══════════════════════════════════════════════
+   FlowchartView — RepoMind dependency graph
+   ═══════════════════════════════════════════════ */
 export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [mode, setMode] = useState<string>('imports');
     const [stats, setStats] = useState<FlowchartStats | null>(null);
 
-    // ── Focus mode state ──
+    /* Focus mode */
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [entryPointIds, setEntryPointIds] = useState<Set<string>>(new Set());
 
-    // Fetch flowchart data
+    /* ── Fetch data ── */
     useEffect(() => {
         setLoading(true);
         setError(null);
@@ -141,161 +176,140 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ owner, repo }),
         })
-            .then(res => res.json())
+            .then(r => r.json())
             .then(data => {
-                if (data.success) {
-                    if (data.nodes.length === 0) {
-                        setNodes([]);
-                        setEdges([]);
-                        return;
-                    }
-                    const laid = applyDagreLayout(data.nodes, data.edges);
+                if (!data.success) { setError(data.message || 'Failed'); return; }
+                if (data.nodes.length === 0) { setNodes([]); setEdges([]); return; }
 
-                    // Detect entry points
-                    const entries = detectEntryPoints(laid.nodes, laid.edges);
-                    setEntryPointIds(entries);
+                const laid = applyDagreLayout(data.nodes, data.edges);
+                const entries = detectEntryPoints(laid.nodes, laid.edges);
+                setEntryPointIds(entries);
 
-                    // Mark entry points in node data
-                    const markedNodes = laid.nodes.map(n => ({
-                        ...n,
-                        data: {
-                            ...n.data,
-                            isEntry: entries.has(n.id),
-                        },
-                    }));
+                // Mark entry points
+                const markedNodes = laid.nodes.map(n => ({
+                    ...n,
+                    data: { ...n.data, isEntry: entries.has(n.id) },
+                }));
 
-                    setNodes(markedNodes);
-                    setEdges(laid.edges);
-                    if (data.mode) setMode(data.mode);
-                    if (data.stats) setStats(data.stats);
-                } else {
-                    setError(data.message || 'Failed to generate flowchart');
-                }
+                // Compute folder groups
+                const folderNodes = computeFolderGroups(markedNodes);
+
+                setNodes([...folderNodes, ...markedNodes]);
+                setEdges(laid.edges);
+                if (data.stats) setStats(data.stats);
             })
             .catch(err => setError(err.message || 'Network error'))
             .finally(() => setLoading(false));
     }, [owner, repo, setNodes, setEdges]);
 
-    // ── Compute connected nodes for focus mode ──
+    /* ── Connected-node set for focus mode ── */
     const connectedNodeIds = useMemo(() => {
         if (!selectedNodeId) return null;
-        const connected = new Set<string>([selectedNodeId]);
+        const s = new Set<string>([selectedNodeId]);
         edges.forEach(e => {
-            if (e.source === selectedNodeId) connected.add(e.target);
-            if (e.target === selectedNodeId) connected.add(e.source);
+            if (e.source === selectedNodeId) s.add(e.target);
+            if (e.target === selectedNodeId) s.add(e.source);
         });
-        return connected;
+        return s;
     }, [selectedNodeId, edges]);
 
-    // ── Get selected node data for info panel ──
-    const selectedNodeData = useMemo(() => {
+    /* ── Selected node info for panel ── */
+    const selectedInfo = useMemo(() => {
         if (!selectedNodeId) return null;
         const node = nodes.find(n => n.id === selectedNodeId);
         if (!node) return null;
-        const data = node.data as any;
-
-        // Find names of imported files
-        const importedNames: string[] = [];
-        const importedByNames: string[] = [];
+        const d = node.data as any;
+        const imports: string[] = [];
+        const usedBy: string[] = [];
         edges.forEach(e => {
             if (e.source === selectedNodeId) {
-                const target = nodes.find(n => n.id === e.target);
-                if (target) importedNames.push((target.data as any)?.label || e.target);
+                const t = nodes.find(n => n.id === e.target);
+                if (t) imports.push((t.data as any)?.label || e.target);
             }
             if (e.target === selectedNodeId) {
-                const source = nodes.find(n => n.id === e.source);
-                if (source) importedByNames.push((source.data as any)?.label || e.source);
+                const s = nodes.find(n => n.id === e.source);
+                if (s) usedBy.push((s.data as any)?.label || e.source);
             }
         });
-
         return {
-            label: data?.label || 'Unknown',
-            fullPath: data?.fullPath || '',
-            fileType: data?.fileType || 'file',
-            color: data?.color || '#60a5fa',
-            imports: importedNames,
-            importedBy: importedByNames,
+            label: d?.label || '?',
+            fullPath: d?.fullPath || '',
+            color: d?.color || '#60a5fa',
+            imports,
+            usedBy,
             isEntry: entryPointIds.has(selectedNodeId),
         };
     }, [selectedNodeId, nodes, edges, entryPointIds]);
 
-    // ── Node click: toggle focus mode ──
-    const onNodeClick = useCallback(
-        (_event: React.MouseEvent, node: Node) => {
-            setSelectedNodeId(prev => prev === node.id ? null : node.id);
-        },
-        []
-    );
+    /* ── Styled nodes with focus state ── */
+    const styledNodes = useMemo(() =>
+        nodes.map(n => {
+            if (n.type === 'folder') return n; // don't dim folder groups
+            return {
+                ...n,
+                data: {
+                    ...n.data,
+                    dimmed: connectedNodeIds ? !connectedNodeIds.has(n.id) : false,
+                    active: selectedNodeId === n.id,
+                    isEntry: entryPointIds.has(n.id),
+                },
+            };
+        }),
+    [nodes, connectedNodeIds, selectedNodeId, entryPointIds]);
 
-    // ── Background click: clear focus ──
-    const onPaneClick = useCallback(() => {
-        setSelectedNodeId(null);
-    }, []);
-
-    // ── Apply focus-mode styling to nodes ──
-    const styledNodes = useMemo(() => {
-        return nodes.map(node => ({
-            ...node,
-            data: {
-                ...node.data,
-                dimmed: connectedNodeIds ? !connectedNodeIds.has(node.id) : false,
-                active: selectedNodeId === node.id,
-                isEntry: entryPointIds.has(node.id),
-            },
-        }));
-    }, [nodes, connectedNodeIds, selectedNodeId, entryPointIds]);
-
-    // ── Apply focus-mode styling to edges ──
-    const styledEdges = useMemo(() => {
-        return edges.map(edge => {
-            const isConnected = selectedNodeId
-                ? (edge.source === selectedNodeId || edge.target === selectedNodeId)
+    /* ── Styled edges with focus state + arrowheads ── */
+    const styledEdges = useMemo(() =>
+        edges.map(e => {
+            const connected = selectedNodeId
+                ? (e.source === selectedNodeId || e.target === selectedNodeId)
                 : false;
-            const isDimmed = selectedNodeId && !isConnected;
+            const dimmed = selectedNodeId && !connected;
 
             return {
-                ...edge,
+                ...e,
                 type: 'smoothstep',
-                animated: isConnected,
-                style: isConnected
+                animated: connected,
+                markerEnd: {
+                    type: MarkerType.ArrowClosed,
+                    color: connected ? '#818cf8' : '#444',
+                    width: 16,
+                    height: 12,
+                },
+                style: connected
                     ? { stroke: '#818cf8', strokeWidth: 2.5 }
-                    : isDimmed
-                        ? { stroke: 'rgba(148, 163, 184, 0.06)', strokeWidth: 1 }
-                        : { stroke: 'rgba(148, 163, 184, 0.25)', strokeWidth: 1.5 },
+                    : dimmed
+                        ? { stroke: 'rgba(148,163,184,0.06)', strokeWidth: 1 }
+                        : { stroke: '#333', strokeWidth: 1.2, opacity: 0.4 },
             };
-        });
-    }, [edges, selectedNodeId]);
+        }),
+    [edges, selectedNodeId]);
 
-    // Legend items computed from current nodes
-    const legendItems = useMemo(() => {
-        const seen = new Map<string, string>();
-        nodes.forEach(n => {
-            const data = n.data as any;
-            if (data?.fileType && !seen.has(data.fileType)) {
-                seen.set(data.fileType, data.color);
-            }
-        });
-        return Array.from(seen.entries()).map(([type, color]) => ({ type, color }));
-    }, [nodes]);
+    /* ── Handlers ── */
+    const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => {
+        if (node.type === 'folder') return;
+        setSelectedNodeId(prev => prev === node.id ? null : node.id);
+    }, []);
 
-    // Count entry points
-    const entryCount = entryPointIds.size;
+    const onPaneClick = useCallback(() => setSelectedNodeId(null), []);
 
-    // ── Loading state ──
+    /* file-only nodes for stats */
+    const fileNodes = useMemo(() => nodes.filter(n => n.type !== 'folder'), [nodes]);
+
+    /* ── Loading ── */
     if (loading) {
         return (
-            <div className="w-full h-[600px] bg-slate-800/50 rounded-2xl border border-slate-700 flex flex-col items-center justify-center text-slate-400">
+            <div className="w-full h-[650px] bg-[#0a0a0f] rounded-2xl border border-white/[0.06] flex flex-col items-center justify-center text-slate-400">
                 <Loader2 className="animate-spin mb-4" size={32} />
-                <p>Analyzing import relationships...</p>
-                <p className="text-xs text-slate-600 mt-1">Parsing source code across all languages</p>
+                <p style={{ fontFamily: "ui-monospace, 'JetBrains Mono', monospace" }}>Analyzing import relationships...</p>
+                <p className="text-xs text-slate-600 mt-1" style={{ fontFamily: "ui-monospace, 'JetBrains Mono', monospace" }}>Parsing source code across all languages</p>
             </div>
         );
     }
 
-    // ── Error state ──
+    /* ── Error ── */
     if (error) {
         return (
-            <div className="w-full h-[600px] bg-slate-800/50 rounded-2xl border border-slate-700 flex flex-col items-center justify-center text-slate-400">
+            <div className="w-full h-[650px] bg-[#0a0a0f] rounded-2xl border border-white/[0.06] flex flex-col items-center justify-center text-slate-400">
                 <AlertCircle className="mb-4 text-red-400" size={32} />
                 <p className="text-red-400 font-medium">Failed to generate flowchart</p>
                 <p className="text-xs text-slate-500 mt-1 max-w-md text-center">{error}</p>
@@ -303,10 +317,10 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
         );
     }
 
-    // ── Empty state ──
-    if (nodes.length === 0) {
+    /* ── Empty ── */
+    if (fileNodes.length === 0) {
         return (
-            <div className="w-full h-[600px] bg-slate-800/50 rounded-2xl border border-slate-700 flex flex-col items-center justify-center text-slate-400">
+            <div className="w-full h-[650px] bg-[#0a0a0f] rounded-2xl border border-white/[0.06] flex flex-col items-center justify-center text-slate-400">
                 <Network className="mb-4" size={32} />
                 <p className="font-medium">No file relationships found</p>
                 <p className="text-xs text-slate-600 mt-1">This repository may be empty or use an unsupported structure</p>
@@ -314,24 +328,79 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
         );
     }
 
-    // ── Main flowchart ──
+    /* ═════════════ MAIN RENDER ═════════════ */
     return (
-        <div className="w-full h-[600px] bg-[#0a0a0f] rounded-2xl border border-slate-700/50 overflow-hidden shadow-inner relative">
-            {/* Animated edge CSS */}
+        <div className="w-full h-[650px] rounded-2xl overflow-hidden relative" style={{ background: '#0a0a0f' }}>
+            {/* Keyframe styles */}
             <style>{`
-                @keyframes entry-pulse {
-                    0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.35); }
-                    70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+                @keyframes pulse-ring {
+                    0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+                    70% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); }
                     100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
                 }
-                .animate-entry-pulse {
-                    animation: entry-pulse 2.5s ease-in-out infinite;
+                @keyframes dash-flow {
+                    to { stroke-dashoffset: -20; }
                 }
-                .react-flow__edge-path {
-                    transition: stroke 0.3s ease, stroke-width 0.3s ease, opacity 0.3s ease;
-                }
+                .react-flow__edge.animated path { animation: dash-flow 1s linear infinite; }
+                .react-flow__controls { background: rgba(10,10,15,0.9) !important; border: 1px solid rgba(255,255,255,0.06) !important; border-radius: 12px !important; }
+                .react-flow__controls-button { background: transparent !important; border-bottom: 1px solid rgba(255,255,255,0.06) !important; color: #888 !important; width: 32px !important; height: 32px !important; }
+                .react-flow__controls-button:hover { background: rgba(30,30,50,0.9) !important; color: #fff !important; }
+                .react-flow__controls-button svg { fill: currentColor !important; }
             `}</style>
 
+            {/* ── TOP BAR (matches prototype) ── */}
+            <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
+                background: 'rgba(10, 10, 15, 0.85)',
+                backdropFilter: 'blur(20px)',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                padding: '10px 20px',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+                {/* Left: logo + title + repo badge */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                        width: '30px', height: '30px',
+                        background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                        borderRadius: '8px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontWeight: 700, fontSize: '13px', color: '#fff',
+                    }}>R</div>
+                    <span style={{
+                        fontSize: '14px', fontWeight: 600, letterSpacing: '-0.3px', color: '#f0f0f5',
+                        fontFamily: "'Sora', sans-serif",
+                    }}>
+                        Repo<span style={{ color: '#818cf8' }}>Mind</span>
+                    </span>
+                    <div style={{
+                        background: 'rgba(99,102,241,0.12)',
+                        border: '1px solid rgba(99,102,241,0.25)',
+                        color: '#a5b4fc',
+                        padding: '3px 10px', borderRadius: '20px',
+                        fontSize: '11px',
+                        fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                        fontWeight: 500,
+                    }}>
+                        {owner}/{repo}
+                    </div>
+                </div>
+
+                {/* Right: legend */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    {LEGEND.map(l => (
+                        <div key={l.label} style={{
+                            display: 'flex', alignItems: 'center', gap: '5px',
+                            fontSize: '11px', color: '#888',
+                            fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                        }}>
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: l.color }} />
+                            {l.label}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* ── REACT FLOW ── */}
             <ReactFlow
                 nodes={styledNodes}
                 edges={styledEdges}
@@ -341,188 +410,147 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                 onPaneClick={onPaneClick}
                 nodeTypes={nodeTypes}
                 fitView
-                fitViewOptions={{ padding: 0.2 }}
-                minZoom={0.05}
-                maxZoom={2}
+                fitViewOptions={{ padding: 0.3 }}
+                minZoom={0.15}
+                maxZoom={2.5}
                 proOptions={{ hideAttribution: true }}
                 defaultEdgeOptions={{
                     type: 'smoothstep',
-                    style: { stroke: 'rgba(148, 163, 184, 0.25)', strokeWidth: 1.5 },
+                    style: { stroke: '#333', strokeWidth: 1.2, opacity: 0.4 },
+                    markerEnd: { type: MarkerType.ArrowClosed, color: '#444', width: 16, height: 12 },
                 }}
+                style={{ background: '#0a0a0f' }}
             >
-                <Background
-                    variant={BackgroundVariant.Dots}
-                    color="rgba(148,163,184,0.06)"
-                    gap={20}
-                    size={1}
-                />
-                <Controls
-                    position="bottom-right"
-                    style={{
-                        background: 'rgba(10,10,15,0.9)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        borderRadius: '12px',
-                    }}
-                />
+                <Background variant={BackgroundVariant.Dots} color="rgba(148,163,184,0.04)" gap={24} size={1} />
+                <Controls position="bottom-left" />
                 <MiniMap
                     nodeColor={(n) => {
-                        const data = n.data as any;
-                        if (connectedNodeIds && !connectedNodeIds.has(n.id)) return '#222';
-                        return data?.color || '#60a5fa';
+                        if (n.type === 'folder') return 'transparent';
+                        if (connectedNodeIds && !connectedNodeIds.has(n.id)) return '#1a1a2a';
+                        return (n.data as any)?.color || '#60a5fa';
                     }}
                     maskColor="rgba(10,10,15,0.85)"
                     style={{
-                        background: 'rgba(10,10,15,0.9)',
+                        background: 'rgba(15, 15, 25, 0.9)',
                         border: '1px solid rgba(255,255,255,0.08)',
                         borderRadius: '12px',
+                        width: 160,
+                        height: 110,
                     }}
-                    position="bottom-left"
+                    position="bottom-right"
+                    pannable
+                    zoomable
                 />
             </ReactFlow>
 
-            {/* Mode + stats badge (top-left) */}
-            <div className="absolute top-3 left-3 bg-[#0d0d14]/90 backdrop-blur-xl border border-white/[0.06] rounded-xl px-3 py-2 z-10">
-                <div className="flex items-center gap-2">
-                    {mode === 'imports' ? (
-                        <FileCode size={12} className="text-indigo-400" />
-                    ) : (
-                        <FolderTree size={12} className="text-amber-400" />
-                    )}
-                    <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">
-                        {mode === 'imports' ? 'Import Graph' : 'Folder Structure'}
-                    </span>
-                </div>
-                <div className="flex items-center gap-3 mt-1.5">
-                    <span className="text-[9px] text-slate-500">
-                        <b className="text-slate-400">{nodes.length}</b> files
-                    </span>
-                    <span className="text-[9px] text-slate-500">
-                        <b className="text-slate-400">{edges.length}</b> connections
-                    </span>
-                    {entryCount > 0 && (
-                        <span className="text-[9px] text-indigo-400/70">
-                            <b className="text-indigo-400">{entryCount}</b> entry{entryCount !== 1 ? ' pts' : ' pt'}
-                        </span>
-                    )}
-                    {stats && stats.totalFiles > 0 && (
-                        <span className="text-[9px] text-slate-600">
-                            {stats.analyzedFiles}/{stats.totalFiles} analyzed
-                        </span>
-                    )}
-                </div>
-            </div>
-
-            {/* Legend overlay (top-right) */}
-            {legendItems.length > 0 && (
-                <div className="absolute top-3 right-3 bg-[#0d0d14]/90 backdrop-blur-xl border border-white/[0.06] rounded-xl p-3 space-y-1.5 z-10 max-w-[160px]">
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Legend</p>
-                    {legendItems.map(item => (
-                        <div key={item.type} className="flex items-center gap-2">
-                            <div
-                                className="w-2.5 h-2.5 rounded-full shrink-0"
-                                style={{ backgroundColor: item.color }}
-                            />
-                            <span className="text-[10px] text-slate-400 capitalize">{item.type}</span>
-                        </div>
-                    ))}
-                    <div className="pt-1.5 mt-1.5 border-t border-white/5 text-[9px] text-slate-600 flex items-center gap-1">
-                        <MousePointerClick size={9} />
-                        Click node to focus
-                    </div>
+            {/* ── HINT (when nothing selected) ── */}
+            {!selectedNodeId && (
+                <div style={{
+                    position: 'absolute', top: '54px', left: '50%', transform: 'translateX(-50%)',
+                    background: 'rgba(99,102,241,0.1)',
+                    border: '1px solid rgba(99,102,241,0.2)',
+                    color: '#a5b4fc', padding: '6px 14px', borderRadius: '10px',
+                    fontSize: '11px',
+                    fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                    zIndex: 100, pointerEvents: 'none',
+                }}>
+                    💡 Click any node to see its connections — click background to reset
                 </div>
             )}
 
-            {/* ── Info Panel (bottom center) ── */}
-            {selectedNodeData && (
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-[#0d0d14]/95 backdrop-blur-xl border border-white/[0.08] rounded-2xl px-5 py-3 z-10 flex items-center gap-5 max-w-[700px] shadow-2xl shadow-black/40">
-                    {/* Close button */}
+            {/* ── INFO PANEL (bottom center, when a node is selected) ── */}
+            {selectedInfo && (
+                <div style={{
+                    position: 'absolute', bottom: '16px', left: '50%', transform: 'translateX(-50%)',
+                    background: 'rgba(15, 15, 25, 0.95)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '16px',
+                    padding: '12px 18px',
+                    display: 'flex', alignItems: 'center', gap: '18px',
+                    zIndex: 100,
+                    fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+                    maxWidth: '650px',
+                }}>
+                    {/* Close */}
                     <button
                         onClick={() => setSelectedNodeId(null)}
-                        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+                        style={{
+                            position: 'absolute', top: '-8px', right: '-8px',
+                            width: '20px', height: '20px', borderRadius: '50%',
+                            background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#888', cursor: 'pointer', fontSize: '10px',
+                        }}
                     >
                         <X size={10} />
                     </button>
 
-                    {/* File name */}
-                    <div className="min-w-0">
-                        <div className="text-[9px] text-slate-600 uppercase tracking-wider font-medium">Selected</div>
-                        <div className="text-sm font-semibold text-slate-100 truncate max-w-[140px]" style={{ color: selectedNodeData.color }}>
-                            {selectedNodeData.label}
-                        </div>
-                        <div className="text-[9px] text-slate-600 font-mono truncate max-w-[140px]">
-                            {selectedNodeData.fullPath}
-                        </div>
+                    {/* Selected */}
+                    <div>
+                        <div style={{ fontSize: '10px', color: '#666', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Selected</div>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: selectedInfo.color }}>{selectedInfo.label}</div>
                     </div>
 
-                    <div className="w-px h-8 bg-white/[0.06] shrink-0" />
+                    <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.08)' }} />
 
                     {/* Imports */}
-                    <div className="min-w-0">
-                        <div className="text-[9px] text-slate-600 uppercase tracking-wider font-medium">
-                            Imports ({selectedNodeData.imports.length})
-                        </div>
-                        <div className="flex flex-wrap gap-1 mt-1 max-w-[200px]">
-                            {selectedNodeData.imports.length === 0 ? (
-                                <span className="text-[9px] text-slate-600 italic">none (leaf)</span>
-                            ) : (
-                                selectedNodeData.imports.slice(0, 6).map((name, i) => (
-                                    <span
-                                        key={i}
-                                        className="px-1.5 py-0.5 rounded-md text-[9px] font-medium bg-indigo-500/10 border border-indigo-500/20 text-indigo-300"
-                                    >
-                                        {name}
-                                    </span>
+                    <div>
+                        <div style={{ fontSize: '10px', color: '#666', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Imports</div>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' as const, marginTop: '3px' }}>
+                            {selectedInfo.imports.length === 0
+                                ? <span style={{ color: '#555', fontSize: '10px' }}>none (leaf)</span>
+                                : selectedInfo.imports.slice(0, 5).map((n, i) => (
+                                    <span key={i} style={{
+                                        background: 'rgba(99,102,241,0.12)',
+                                        border: '1px solid rgba(99,102,241,0.2)',
+                                        color: '#a5b4fc', padding: '2px 8px', borderRadius: '6px', fontSize: '10px',
+                                    }}>{n}</span>
                                 ))
-                            )}
-                            {selectedNodeData.imports.length > 6 && (
-                                <span className="text-[9px] text-slate-500">+{selectedNodeData.imports.length - 6}</span>
+                            }
+                            {selectedInfo.imports.length > 5 && (
+                                <span style={{ color: '#555', fontSize: '10px' }}>+{selectedInfo.imports.length - 5}</span>
                             )}
                         </div>
                     </div>
 
-                    <div className="w-px h-8 bg-white/[0.06] shrink-0" />
+                    <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.08)' }} />
 
-                    {/* Imported By */}
-                    <div className="min-w-0">
-                        <div className="text-[9px] text-slate-600 uppercase tracking-wider font-medium">
-                            Used by ({selectedNodeData.importedBy.length})
-                        </div>
-                        <div className="flex flex-wrap gap-1 mt-1 max-w-[200px]">
-                            {selectedNodeData.importedBy.length === 0 ? (
-                                <span className="text-[9px] text-slate-600 italic">none (root)</span>
-                            ) : (
-                                selectedNodeData.importedBy.slice(0, 6).map((name, i) => (
-                                    <span
-                                        key={i}
-                                        className="px-1.5 py-0.5 rounded-md text-[9px] font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
-                                    >
-                                        {name}
-                                    </span>
+                    {/* Used by */}
+                    <div>
+                        <div style={{ fontSize: '10px', color: '#666', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Used By</div>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' as const, marginTop: '3px' }}>
+                            {selectedInfo.usedBy.length === 0
+                                ? <span style={{ color: '#555', fontSize: '10px' }}>none (root)</span>
+                                : selectedInfo.usedBy.slice(0, 5).map((n, i) => (
+                                    <span key={i} style={{
+                                        background: 'rgba(16,185,129,0.12)',
+                                        border: '1px solid rgba(16,185,129,0.2)',
+                                        color: '#6ee7b7', padding: '2px 8px', borderRadius: '6px', fontSize: '10px',
+                                    }}>{n}</span>
                                 ))
-                            )}
-                            {selectedNodeData.importedBy.length > 6 && (
-                                <span className="text-[9px] text-slate-500">+{selectedNodeData.importedBy.length - 6}</span>
+                            }
+                            {selectedInfo.usedBy.length > 5 && (
+                                <span style={{ color: '#555', fontSize: '10px' }}>+{selectedInfo.usedBy.length - 5}</span>
                             )}
                         </div>
                     </div>
 
                     {/* Entry badge */}
-                    {selectedNodeData.isEntry && (
+                    {selectedInfo.isEntry && (
                         <>
-                            <div className="w-px h-8 bg-white/[0.06] shrink-0" />
-                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
-                                <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-                                <span className="text-[9px] font-bold text-indigo-300 uppercase tracking-wider">Entry Point</span>
+                            <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.08)' }} />
+                            <div style={{
+                                display: 'flex', alignItems: 'center', gap: '6px',
+                                padding: '4px 10px', borderRadius: '8px',
+                                background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)',
+                            }}>
+                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#818cf8' }} />
+                                <span style={{ fontSize: '10px', fontWeight: 700, color: '#a5b4fc', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Entry Point</span>
                             </div>
                         </>
                     )}
-                </div>
-            )}
-
-            {/* Hint tooltip (top center) */}
-            {!selectedNodeId && (
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-indigo-500/8 border border-indigo-500/15 text-indigo-300/70 px-3 py-1.5 rounded-lg text-[10px] z-10 font-mono pointer-events-none">
-                    Click any node to explore its connections
                 </div>
             )}
         </div>

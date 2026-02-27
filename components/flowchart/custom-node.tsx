@@ -2,7 +2,6 @@
 
 import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { FileCode, FolderOpen, ArrowDownToLine, ArrowUpFromLine, Zap } from 'lucide-react';
 
 interface FileNodeData {
     label: string;
@@ -16,6 +15,7 @@ interface FileNodeData {
     isEntry?: boolean;
     dimmed?: boolean;
     active?: boolean;
+    lines?: number;
     [key: string]: unknown;
 }
 
@@ -24,133 +24,158 @@ interface CustomNodeProps {
     selected?: boolean;
 }
 
-function FileNode({ data, selected }: CustomNodeProps) {
-    const Icon = data.isFolder ? FolderOpen : FileCode;
-    const hasEdgeInfo = typeof data.imports === 'number' || typeof data.importedBy === 'number';
-    const isActive = data.active || selected;
+/* File-extension → icon label */
+const TYPE_LABELS: Record<string, string> = {
+    tsx: 'TSX', ts: 'TS', js: 'JS', jsx: 'JSX',
+    css: 'CSS', py: 'PY', json: '{ }', config: '⚙',
+    entry: '▶', test: 'TST', api: 'API', component: 'UI',
+    util: 'LIB', model: 'M', service: 'SVC', docs: 'MD', source: 'SRC',
+};
+
+const DARK_TEXT_TYPES = new Set(['js', 'jsx', 'config']);
+
+function FileNode({ data }: CustomNodeProps) {
     const isDimmed = data.dimmed;
+    const isActive = data.active;
     const isEntry = data.isEntry;
+    const typeLabel = TYPE_LABELS[data.fileType] || data.fileType.slice(0, 3).toUpperCase();
+    const darkText = DARK_TEXT_TYPES.has(data.fileType);
+    const importCount = typeof data.imports === 'number' ? data.imports : 0;
+    const usedByCount = typeof data.importedBy === 'number' ? data.importedBy : 0;
 
     return (
         <div
-            className={`
-                group relative rounded-xl px-3 py-2.5
-                border transition-all duration-300 cursor-pointer
-                min-w-[150px] max-w-[240px]
-                ${isDimmed
-                    ? 'opacity-[0.12] grayscale pointer-events-none scale-95'
-                    : isActive
-                        ? 'shadow-lg scale-[1.04] z-50'
-                        : 'hover:scale-[1.03] hover:shadow-lg'
-                }
-                ${isEntry && !isDimmed ? 'animate-entry-pulse' : ''}
-            `}
             style={{
-                background: isDimmed
-                    ? 'rgba(15,15,20,0.6)'
-                    : 'rgba(20,20,30,0.95)',
-                backdropFilter: 'blur(12px)',
-                borderLeft: `3px solid ${data.color}`,
-                borderColor: isActive
-                    ? data.color + '80'
-                    : isEntry && !isDimmed
-                        ? data.color + '50'
-                        : 'rgba(255,255,255,0.08)',
-                boxShadow: isActive
-                    ? `0 0 24px ${data.color}30, 0 8px 32px rgba(0,0,0,0.4)`
-                    : isEntry && !isDimmed
-                        ? `0 0 16px ${data.color}20`
-                        : 'none',
+                opacity: isDimmed ? 0.12 : 1,
+                filter: isDimmed ? 'grayscale(0.8)' : 'none',
+                transform: isActive ? 'scale(1.06)' : isDimmed ? 'scale(0.95)' : 'scale(1)',
+                transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                pointerEvents: isDimmed ? 'none' as const : 'auto' as const,
             }}
         >
-            {/* Entry badge */}
-            {isEntry && !isDimmed && (
-                <div
-                    className="absolute -top-2 -right-2 px-1.5 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-wider text-white z-10 flex items-center gap-0.5"
-                    style={{ background: data.color }}
-                >
-                    <Zap size={7} />
-                    Entry
-                </div>
-            )}
-
-            {/* Target handle (top) */}
-            <Handle
-                type="target"
-                position={Position.Top}
-                className="!w-2 !h-2 !border-0 !rounded-full"
+            <div
                 style={{
-                    background: isActive ? data.color : '#3b82f6',
-                    opacity: isDimmed ? 0.1 : 0.6,
+                    position: 'relative',
+                    background: 'rgba(20, 20, 30, 0.95)',
+                    border: isActive
+                        ? '1.5px solid #818cf8'
+                        : isEntry && !isDimmed
+                            ? '1.5px solid #6366f1'
+                            : '1.5px solid rgba(255,255,255,0.08)',
+                    borderLeft: `3px solid ${data.color}`,
+                    borderRadius: '12px',
+                    padding: '10px 14px',
+                    minWidth: '140px',
+                    maxWidth: '250px',
+                    backdropFilter: 'blur(10px)',
+                    cursor: 'pointer',
+                    boxShadow: isActive
+                        ? '0 0 30px rgba(99,102,241,0.2), 0 0 0 1px #818cf8'
+                        : isEntry && !isDimmed
+                            ? '0 0 16px rgba(99,102,241,0.15)'
+                            : '0 2px 8px rgba(0,0,0,0.3)',
+                    animation: isEntry && !isDimmed && !isActive ? 'pulse-ring 2s infinite' : 'none',
                 }}
-            />
-
-            {/* Content */}
-            <div className="flex items-center gap-2">
-                <div
-                    className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
-                    style={{
-                        backgroundColor: data.color + '20',
-                    }}
-                >
-                    <Icon
-                        size={12}
-                        className="shrink-0"
-                        style={{ color: data.color }}
-                    />
-                </div>
-                <div className="min-w-0 flex-1">
-                    <p className={`text-[12px] font-semibold truncate leading-tight ${isActive ? 'text-white' : 'text-slate-200'}`}>
-                        {data.label}
-                    </p>
-                    <p className="text-[9px] text-slate-500 truncate mt-0.5 font-mono">
-                        {data.fullPath}
-                    </p>
-                </div>
-            </div>
-
-            {/* Type badge + edge counts */}
-            <div className="mt-2 flex items-center gap-1.5 pt-1.5 border-t border-white/5">
-                <span
-                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-md capitalize"
-                    style={{
-                        backgroundColor: data.color + '18',
-                        color: data.color,
-                    }}
-                >
-                    {data.fileType}
-                </span>
-
-                {hasEdgeInfo && (
-                    <div className="flex items-center gap-2 ml-auto">
-                        {typeof data.imports === 'number' && data.imports > 0 && (
-                            <span className="flex items-center gap-0.5 text-[8px] text-slate-400" title={`Imports ${data.imports} file${data.imports > 1 ? 's' : ''}`}>
-                                <ArrowUpFromLine size={8} className="text-blue-400/70" />
-                                <b>{data.imports}</b>
-                            </span>
-                        )}
-                        {typeof data.importedBy === 'number' && data.importedBy > 0 && (
-                            <span className="flex items-center gap-0.5 text-[8px] text-slate-400" title={`Imported by ${data.importedBy} file${data.importedBy > 1 ? 's' : ''}`}>
-                                <ArrowDownToLine size={8} className="text-green-400/70" />
-                                <b>{data.importedBy}</b>
-                            </span>
-                        )}
+            >
+                {/* ENTRY badge */}
+                {isEntry && !isDimmed && (
+                    <div style={{
+                        position: 'absolute', top: '-8px', right: '-8px',
+                        background: '#6366f1', color: '#fff',
+                        fontSize: '8px', padding: '2px 6px', borderRadius: '6px',
+                        fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                        fontWeight: 700, textTransform: 'uppercase' as const,
+                        letterSpacing: '0.5px', zIndex: 10,
+                    }}>
+                        ENTRY
                     </div>
                 )}
+
+                {/* Header row: icon + filename */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <div style={{
+                        width: '20px', height: '20px', borderRadius: '5px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '10px', fontWeight: 700,
+                        fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                        color: darkText ? '#000' : '#fff',
+                        background: data.color, flexShrink: 0,
+                    }}>
+                        {typeLabel}
+                    </div>
+                    <div style={{
+                        fontSize: '12.5px', fontWeight: 600,
+                        fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                        color: '#e8e8f0',
+                        whiteSpace: 'nowrap' as const, overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                    }}>
+                        {data.label}
+                    </div>
+                </div>
+
+                {/* Path */}
+                <div style={{
+                    fontSize: '10px', color: '#666',
+                    fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                    whiteSpace: 'nowrap' as const, overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                }}>
+                    {data.fullPath}
+                </div>
+
+                {/* Meta row */}
+                <div style={{
+                    display: 'flex', gap: '8px', marginTop: '6px', paddingTop: '6px',
+                    borderTop: '1px solid rgba(255,255,255,0.05)',
+                }}>
+                    <div style={{ fontSize: '9.5px', color: '#555', fontFamily: "ui-monospace, 'JetBrains Mono', monospace" }}>
+                        <b style={{ color: '#999' }}>{importCount}</b> imports
+                    </div>
+                    <div style={{ fontSize: '9.5px', color: '#555', fontFamily: "ui-monospace, 'JetBrains Mono', monospace" }}>
+                        <b style={{ color: '#999' }}>{usedByCount}</b> used by
+                    </div>
+                </div>
             </div>
 
-            {/* Source handle (bottom) */}
-            <Handle
-                type="source"
-                position={Position.Bottom}
+            {/* Handles */}
+            <Handle type="target" position={Position.Top}
                 className="!w-2 !h-2 !border-0 !rounded-full"
-                style={{
-                    background: isActive ? data.color : '#3b82f6',
-                    opacity: isDimmed ? 0.1 : 0.6,
-                }}
+                style={{ background: isActive ? '#818cf8' : data.color, opacity: isDimmed ? 0.1 : 0.5 }}
+            />
+            <Handle type="source" position={Position.Bottom}
+                className="!w-2 !h-2 !border-0 !rounded-full"
+                style={{ background: isActive ? '#818cf8' : data.color, opacity: isDimmed ? 0.1 : 0.5 }}
             />
         </div>
     );
 }
 
 export const CustomFileNode = memo(FileNode);
+
+/* ── Folder group node (dashed border container) ── */
+function FolderGroup({ data }: { data: { label: string; w: number; h: number; [key: string]: unknown } }) {
+    return (
+        <div style={{
+            width: data.w, height: data.h,
+            border: '1px dashed rgba(255,255,255,0.06)',
+            borderRadius: '20px',
+            background: 'rgba(255,255,255,0.015)',
+            position: 'relative',
+            pointerEvents: 'none' as const,
+        }}>
+            <span style={{
+                position: 'absolute', top: '-10px', left: '16px',
+                background: '#0a0a0f', padding: '2px 10px',
+                fontSize: '10px',
+                fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                color: '#555', borderRadius: '4px',
+                letterSpacing: '0.5px', textTransform: 'uppercase' as const,
+            }}>
+                {data.label}
+            </span>
+        </div>
+    );
+}
+
+export const FolderGroupNode = memo(FolderGroup);
