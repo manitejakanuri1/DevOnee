@@ -6,8 +6,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Menu, X, MessageCircle, Shield, GitBranch,
     FileText, Bot, LayoutDashboard, Trophy, Share2, Terminal,
-    Network, Brain,
+    Network, Brain, RefreshCw, Loader2, BookOpen, Clock,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 import { FileExplorer } from '@/components/file-explorer';
 import { ChatInterface } from '@/components/chat-interface';
@@ -105,6 +106,11 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
     const [showLicenseWarning, setShowLicenseWarning] = useState(false);
     const [showLicenseBanner, setShowLicenseBanner] = useState(true);
 
+    // Comprehensive summary state
+    const [projectSummary, setProjectSummary] = useState<string | null>(null);
+    const [summaryLoading, setSummaryLoading] = useState(false);
+    const [summaryGeneratedAt, setSummaryGeneratedAt] = useState<string | null>(null);
+
     // Responsive panel state
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
@@ -120,6 +126,9 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
         setLicenseData(null);
         setShowLicenseWarning(false);
         setShowLicenseBanner(true);
+        setProjectSummary(null);
+        setSummaryGeneratedAt(null);
+        setSummaryLoading(false);
 
         // Fetch overview
         fetch('/api/repo/overview', {
@@ -176,7 +185,44 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                 }
             })
             .catch(console.error);
+
+        // Fetch comprehensive summary (auto-generate if not cached)
+        setSummaryLoading(true);
+        fetch('/api/repo/summary', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ owner, repo })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    setProjectSummary(data.summary);
+                    setSummaryGeneratedAt(data.generatedAt || null);
+                }
+            })
+            .catch(console.error)
+            .finally(() => setSummaryLoading(false));
     }, [owner, repo]);
+
+    const handleRegenerateSummary = async () => {
+        setSummaryLoading(true);
+        try {
+            const res = await fetch('/api/repo/summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ owner, repo, force: true })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setProjectSummary(data.summary);
+                setSummaryGeneratedAt(data.generatedAt || null);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setSummaryLoading(false);
+        }
+    };
 
     const handleRepoNavigate = (newOwner: string, newRepo: string) => {
         setOwner(newOwner);
@@ -361,6 +407,59 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                                                     <div className="h-4 bg-white/5 rounded w-5/6" />
                                                     <div className="h-4 bg-white/5 rounded w-4/6" />
                                                 </div>
+                                            )}
+                                        </div>
+
+                                        {/* Comprehensive Summary */}
+                                        <div className="glass-card rounded-2xl p-6">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                                    <BookOpen size={18} className="text-blue-400" />
+                                                    Comprehensive Analysis
+                                                </h3>
+                                                <div className="flex items-center gap-2">
+                                                    {summaryGeneratedAt && (
+                                                        <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                                                            <Clock size={10} />
+                                                            {new Date(summaryGeneratedAt).toLocaleDateString()}
+                                                        </span>
+                                                    )}
+                                                    <button
+                                                        onClick={handleRegenerateSummary}
+                                                        disabled={summaryLoading}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 hover:border-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        {summaryLoading ? (
+                                                            <Loader2 size={12} className="animate-spin" />
+                                                        ) : (
+                                                            <RefreshCw size={12} />
+                                                        )}
+                                                        {summaryLoading ? 'Analyzing...' : 'Regenerate'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {summaryLoading && !projectSummary ? (
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center gap-3 text-sm text-slate-400">
+                                                        <Loader2 size={16} className="animate-spin text-blue-400" />
+                                                        Analyzing all indexed files with AI...
+                                                    </div>
+                                                    <div className="space-y-3 animate-pulse">
+                                                        <div className="h-4 bg-white/5 rounded w-full" />
+                                                        <div className="h-4 bg-white/5 rounded w-5/6" />
+                                                        <div className="h-4 bg-white/5 rounded w-4/6" />
+                                                        <div className="h-4 bg-white/5 rounded w-full" />
+                                                        <div className="h-4 bg-white/5 rounded w-3/6" />
+                                                    </div>
+                                                </div>
+                                            ) : projectSummary ? (
+                                                <div className="prose prose-invert prose-sm max-w-none text-slate-300 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-slate-200 [&_ul]:space-y-1 [&_li]:text-slate-300 [&_strong]:text-slate-200 [&_code]:text-blue-300 [&_code]:bg-blue-500/10 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_hr]:border-white/5 [&_hr]:my-4">
+                                                    <ReactMarkdown>{projectSummary}</ReactMarkdown>
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-slate-500">
+                                                    No comprehensive summary available. Click Regenerate to analyze all files.
+                                                </p>
                                             )}
                                         </div>
 

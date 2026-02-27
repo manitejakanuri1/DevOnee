@@ -103,6 +103,8 @@ create table repositories (
   name text not null,
   url text not null,
   summary text,
+  project_summary text,
+  summary_generated_at timestamptz,
   created_at timestamptz default now()
 );
 
