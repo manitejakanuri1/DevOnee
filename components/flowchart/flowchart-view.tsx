@@ -15,12 +15,18 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import Dagre from '@dagrejs/dagre';
-import { Loader2, AlertCircle, Network } from 'lucide-react';
+import { Loader2, AlertCircle, Network, FileCode, FolderTree } from 'lucide-react';
 import { CustomFileNode } from './custom-node';
 
 interface FlowchartViewProps {
     owner: string;
     repo: string;
+}
+
+interface FlowchartStats {
+    totalFiles: number;
+    analyzedFiles: number;
+    resolvedEdges: number;
 }
 
 // Register custom node type (outside component to prevent re-renders)
@@ -36,7 +42,7 @@ function applyDagreLayout(
     g.setGraph({ rankdir: direction, nodesep: 60, ranksep: 90, edgesep: 25 });
 
     rawNodes.forEach(node => {
-        g.setNode(node.id, { width: 180, height: 70 });
+        g.setNode(node.id, { width: 200, height: 80 });
     });
 
     rawEdges.forEach(edge => {
@@ -50,8 +56,8 @@ function applyDagreLayout(
         return {
             ...node,
             position: {
-                x: dagreNode.x - 90, // center (half of 180 width)
-                y: dagreNode.y - 35, // center (half of 70 height)
+                x: dagreNode.x - 100,
+                y: dagreNode.y - 40,
             },
         };
     });
@@ -66,6 +72,8 @@ export function FlowchartView({ owner, repo }: FlowchartViewProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+    const [mode, setMode] = useState<string>('imports');
+    const [stats, setStats] = useState<FlowchartStats | null>(null);
 
     // Fetch flowchart data
     useEffect(() => {
@@ -88,6 +96,8 @@ export function FlowchartView({ owner, repo }: FlowchartViewProps) {
                     const laid = applyDagreLayout(data.nodes, data.edges);
                     setNodes(laid.nodes);
                     setEdges(laid.edges);
+                    if (data.mode) setMode(data.mode);
+                    if (data.stats) setStats(data.stats);
                 } else {
                     setError(data.message || 'Failed to generate flowchart');
                 }
@@ -146,7 +156,7 @@ export function FlowchartView({ owner, repo }: FlowchartViewProps) {
             <div className="w-full h-[600px] bg-slate-800/50 rounded-2xl border border-slate-700 flex flex-col items-center justify-center text-slate-400">
                 <Loader2 className="animate-spin mb-4" size={32} />
                 <p>Analyzing import relationships...</p>
-                <p className="text-xs text-slate-600 mt-1">This may take a moment for large repos</p>
+                <p className="text-xs text-slate-600 mt-1">Parsing source code across all languages</p>
             </div>
         );
     }
@@ -167,8 +177,8 @@ export function FlowchartView({ owner, repo }: FlowchartViewProps) {
         return (
             <div className="w-full h-[600px] bg-slate-800/50 rounded-2xl border border-slate-700 flex flex-col items-center justify-center text-slate-400">
                 <Network className="mb-4" size={32} />
-                <p className="font-medium">No importable files found</p>
-                <p className="text-xs text-slate-600 mt-1">This repository may not contain JavaScript or TypeScript files</p>
+                <p className="font-medium">No file relationships found</p>
+                <p className="text-xs text-slate-600 mt-1">This repository may be empty or use an unsupported structure</p>
             </div>
         );
     }
@@ -187,7 +197,7 @@ export function FlowchartView({ owner, repo }: FlowchartViewProps) {
                 nodeTypes={nodeTypes}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
-                minZoom={0.1}
+                minZoom={0.05}
                 maxZoom={2}
                 proOptions={{ hideAttribution: true }}
                 defaultEdgeOptions={{
@@ -221,7 +231,36 @@ export function FlowchartView({ owner, repo }: FlowchartViewProps) {
                 />
             </ReactFlow>
 
-            {/* Legend overlay */}
+            {/* Mode + stats badge (top-left) */}
+            <div className="absolute top-3 left-3 bg-slate-900/90 backdrop-blur-sm border border-slate-700 rounded-xl px-3 py-2 z-10">
+                <div className="flex items-center gap-2">
+                    {mode === 'imports' ? (
+                        <FileCode size={12} className="text-blue-400" />
+                    ) : (
+                        <FolderTree size={12} className="text-amber-400" />
+                    )}
+                    <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">
+                        {mode === 'imports' ? 'Import Graph' : 'Folder Structure'}
+                    </span>
+                </div>
+                {stats && (
+                    <div className="flex items-center gap-3 mt-1.5">
+                        <span className="text-[9px] text-slate-500">
+                            {nodes.length} files
+                        </span>
+                        <span className="text-[9px] text-slate-500">
+                            {edges.length} connections
+                        </span>
+                        {stats.totalFiles > 0 && (
+                            <span className="text-[9px] text-slate-600">
+                                {stats.analyzedFiles}/{stats.totalFiles} analyzed
+                            </span>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Legend overlay (top-right) */}
             {legendItems.length > 0 && (
                 <div className="absolute top-3 right-3 bg-slate-900/90 backdrop-blur-sm border border-slate-700 rounded-xl p-3 space-y-1.5 z-10">
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">File Types</p>
