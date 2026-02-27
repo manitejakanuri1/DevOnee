@@ -63,17 +63,23 @@ interface SimNode extends SimulationNodeDatum {
 function applyForceLayout(
     rawNodes: Node[],
     rawEdges: Edge[],
+    entryId?: string | null,
 ): { nodes: Node[]; edges: Edge[] } {
     const NODE_W = 220;
     const NODE_H = 95;
 
-    // Build simulation nodes
-    const simNodes: SimNode[] = rawNodes.map((n, i) => ({
-        id: n.id,
-        x: Math.cos(2 * Math.PI * i / rawNodes.length) * 300 + Math.random() * 50,
-        y: Math.sin(2 * Math.PI * i / rawNodes.length) * 300 + Math.random() * 50,
-        _original: n,
-    }));
+    // Build simulation nodes — pin entry to top center
+    const simNodes: SimNode[] = rawNodes.map((n, i) => {
+        const isEntry = n.id === entryId;
+        return {
+            id: n.id,
+            x: isEntry ? 0 : Math.cos(2 * Math.PI * i / rawNodes.length) * 300 + Math.random() * 50,
+            y: isEntry ? -400 : Math.sin(2 * Math.PI * i / rawNodes.length) * 300 + Math.random() * 50,
+            fx: isEntry ? 0 : undefined,       // fix entry X at center
+            fy: isEntry ? -400 : undefined,     // fix entry Y at top
+            _original: n,
+        };
+    });
 
     const nodeMap = new Map(simNodes.map(n => [n.id, n]));
 
@@ -252,9 +258,12 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                 if (!data.success) { setError(data.message || 'Failed'); return; }
                 if (data.nodes.length === 0) { setNodes([]); setEdges([]); return; }
 
-                const laid = applyForceLayout(data.nodes, data.edges);
-                const entries = detectEntryPoints(laid.nodes, laid.edges);
+                // Detect entry FIRST so we can pin it at top during layout
+                const entries = detectEntryPoints(data.nodes, data.edges);
+                const entryId = entries.size > 0 ? Array.from(entries)[0] : null;
                 setEntryPointIds(entries);
+
+                const laid = applyForceLayout(data.nodes, data.edges, entryId);
 
                 // Mark entry points
                 const markedNodes = laid.nodes.map(n => ({
@@ -316,13 +325,16 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
     const styledNodes = useMemo(() =>
         nodes.map(n => {
             if (n.type === 'folder') return n; // don't dim folder groups
+            const isEntry = entryPointIds.has(n.id);
             return {
                 ...n,
                 data: {
                     ...n.data,
                     dimmed: connectedNodeIds ? !connectedNodeIds.has(n.id) : false,
                     active: selectedNodeId === n.id,
-                    isEntry: entryPointIds.has(n.id),
+                    isEntry,
+                    // When nothing is selected, non-entry nodes get subtle shadow
+                    shadowed: !selectedNodeId && !isEntry,
                 },
             };
         }),

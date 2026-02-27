@@ -15,6 +15,7 @@ interface FileNodeData {
     isEntry?: boolean;
     dimmed?: boolean;
     active?: boolean;
+    shadowed?: boolean;
     lines?: number;
     [key: string]: unknown;
 }
@@ -39,6 +40,7 @@ function FileNode({ data }: CustomNodeProps) {
     const isDimmed = data.dimmed;
     const isActive = data.active;
     const isEntry = data.isEntry;
+    const isShadowed = data.shadowed && !hovered; // subtle shadow for non-entry nodes
     const typeLabel = TYPE_LABELS[data.fileType] || data.fileType.slice(0, 3).toUpperCase();
     const darkText = DARK_TEXT_TYPES.has(data.fileType);
     const lineCount = typeof data.lines === 'number' ? data.lines : 0;
@@ -49,8 +51,8 @@ function FileNode({ data }: CustomNodeProps) {
             onMouseEnter={() => !isDimmed && setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             style={{
-                opacity: isDimmed ? 0.12 : 1,
-                filter: isDimmed ? 'grayscale(0.8)' : 'none',
+                opacity: isDimmed ? 0.12 : isShadowed ? 0.55 : 1,
+                filter: isDimmed ? 'grayscale(0.8)' : isShadowed ? 'brightness(0.7)' : 'none',
                 transform: isActive ? 'scale(1.06)' : hovered && !isDimmed ? 'scale(1.06)' : isDimmed ? 'scale(0.95)' : 'scale(1)',
                 transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
                 pointerEvents: isDimmed ? 'none' as const : 'auto' as const,
