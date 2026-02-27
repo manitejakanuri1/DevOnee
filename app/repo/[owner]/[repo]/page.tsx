@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -169,6 +169,10 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
         setActiveTab('contribute');
     };
 
+    const handleAddToChat = useCallback(() => {
+        setChatOpen(true);
+    }, []);
+
     return (
         <div className="h-screen bg-[#0B1120] text-slate-50 flex flex-col overflow-hidden">
             {/* ── Header ── */}
@@ -238,6 +242,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                         selectedFiles={selectedFiles}
                         onSelectFiles={setSelectedFiles}
                         onFileClick={handleFileClick}
+                        onAddToChat={handleAddToChat}
                     />
                 </aside>
 
@@ -272,6 +277,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                                     selectedFiles={selectedFiles}
                                     onSelectFiles={setSelectedFiles}
                                     onFileClick={handleFileClick}
+                                    onAddToChat={handleAddToChat}
                                 />
                             </motion.aside>
                         </>

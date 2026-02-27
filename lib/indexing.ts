@@ -123,7 +123,8 @@ export async function indexRepository(owner: string, repo: string, jobId: string
                             return {
                                 repository_id: repoId,
                                 content: `File: ${file.path} (Part ${index + 1})\n\n${chunk}`,
-                                embedding: embedding
+                                embedding: embedding,
+                                file_path: file.path
                             };
                         }
                         return null;

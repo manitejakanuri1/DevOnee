@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserIdentity } from "@/lib/auth-guard";
 import { checkAndIncrementUsage } from "@/lib/usage";
 import { createAdminClient } from "@/lib/supabase/server";
+import { generateEmbedding } from "@/lib/embeddings";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: NextRequest) {
@@ -36,19 +37,20 @@ export async function POST(req: NextRequest) {
                 .single();
 
             if (repository) {
-                // Basic non-vector retrieval for prototype: grab chunks from selected files
-                if (selectedFiles.length > 0) {
-                    const fileConditions = selectedFiles.map((f: string) => `content.ilike.%${f}%`).join(',');
-                    const { data: chunks } = await supabase
-                        .from('embeddings')
-                        .select('content')
-                        .eq('repository_id', (repository as any).id)
-                        .or(fileConditions)
-                        .limit(10) as any;
-
-                    contextText = chunks?.map((c: any) => c.content).join("\n---\n") || "";
+                // Vector similarity search using match_embeddings RPC
+                const queryEmbedding = await generateEmbedding(message);
+                if (queryEmbedding) {
+                    const filterPaths = selectedFiles.length > 0 ? selectedFiles : null;
+                    const { data: matches } = await supabase.rpc("match_embeddings", {
+                        query_embedding: queryEmbedding,
+                        match_repository_id: (repository as any).id,
+                        match_count: 8,
+                        match_threshold: 0.3,
+                        filter_file_paths: filterPaths,
+                    });
+                    contextText = (matches || []).map((m: any) => m.content).join("\n---\n");
                 } else {
-                    // Fallback to top random chunks
+                    // Fallback if embedding generation fails
                     const { data: chunks } = await supabase
                         .from('embeddings')
                         .select('content')

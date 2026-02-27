@@ -100,6 +100,7 @@ create table embeddings (
   id uuid default gen_random_uuid() primary key,
   repository_id uuid references repositories(id) on delete cascade not null,
   content text not null,
+  file_path text,
   embedding vector(768), -- Gemini text-embedding-004 outputs 768 dimensions
   created_at timestamptz default now()
 );
