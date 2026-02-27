@@ -25,9 +25,10 @@ import { DryRunPanel } from '@/components/dry-run-panel';
 import { LicenseWarning } from '@/components/repo-dashboard/license-warning';
 import { LicenseWarningDialog, LicenseBanner } from '@/components/license-warning-dialog';
 import { CommunityInsightsTab } from '@/components/community-insights-tab';
+import { AutofixDashboard } from '@/components/repo-dashboard/autofix-dashboard';
 import { Users } from 'lucide-react';
 
-type Tab = 'overview' | 'challenges' | 'map' | 'contribute' | 'community';
+type Tab = 'overview' | 'challenges' | 'map' | 'contribute' | 'community' | 'agent';
 
 const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: 'Overview', icon: <LayoutDashboard size={14} /> },
@@ -35,6 +36,7 @@ const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'map', label: 'Codebase Map', icon: <Share2 size={14} /> },
     { key: 'contribute', label: 'Contribute', icon: <Terminal size={14} /> },
     { key: 'community', label: 'Community', icon: <Users size={14} /> },
+    { key: 'agent', label: 'Agent', icon: <Bot size={14} /> },
 ];
 
 // ── Codebase Map sub-tab with Flowchart/Mindmap toggle ──
@@ -625,6 +627,11 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                         {/* ── COMMUNITY TAB ── */}
                         {activeTab === 'community' && (
                             <CommunityInsightsTab owner={owner} repo={repo} />
+                        )}
+
+                        {/* ── AGENT TAB ── */}
+                        {activeTab === 'agent' && (
+                            <AutofixDashboard owner={owner} repo={repo} />
                         )}
 
                         {/* ── CONTRIBUTE TAB ── */}
