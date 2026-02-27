@@ -16,7 +16,7 @@ import { HealthScoreVisual } from '@/components/repo-dashboard/health-score-visu
 import { ReadmePreview } from '@/components/repo-dashboard/readme-preview';
 import { FileViewer } from '@/components/repo-dashboard/file-viewer';
 import { ChallengeBoard } from '@/components/challenge-board';
-import { DependencyGraph } from '@/components/dependency-graph';
+import { FlowchartView } from '@/components/flowchart/flowchart-view';
 import { ContributeSandbox } from '@/components/contribute-sandbox';
 import { DryRunPanel } from '@/components/dry-run-panel';
 import { LicenseWarning } from '@/components/repo-dashboard/license-warning';
@@ -307,7 +307,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
                         {/* ── CODEBASE MAP TAB ── */}
                         {activeTab === 'map' && (
-                            <DependencyGraph owner={owner} repo={repo} />
+                            <FlowchartView owner={owner} repo={repo} />
                         )}
 
                         {/* ── CONTRIBUTE TAB ── */}

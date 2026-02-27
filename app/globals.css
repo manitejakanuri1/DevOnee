@@ -79,3 +79,26 @@ a {
   max-width: 100%;
   border-radius: 0.5rem;
 }
+
+/* React Flow dark theme overrides */
+.react-flow__controls button {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #94a3b8 !important;
+  border-radius: 6px !important;
+}
+.react-flow__controls button:hover {
+  background: rgba(30, 41, 59, 0.9) !important;
+  color: #fff !important;
+}
+.react-flow__controls button svg {
+  fill: currentColor !important;
+}
+.react-flow__minimap {
+  background: rgba(15, 23, 42, 0.9) !important;
+  border-radius: 12px !important;
+}
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #3b82f6 !important;
+  stroke-width: 2.5 !important;
+}

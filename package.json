@@ -14,6 +14,7 @@
   "license": "ISC",
   "packageManager": "npm@10.9.2",
   "dependencies": {
+    "@dagrejs/dagre": "^2.0.4",
     "@google/generative-ai": "^0.24.1",
     "@next-auth/supabase-adapter": "^0.2.1",
     "@radix-ui/react-avatar": "^1.1.11",
@@ -25,6 +26,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.97.0",
+    "@xyflow/react": "^12.10.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dependency-tree": "^11.3.0",
