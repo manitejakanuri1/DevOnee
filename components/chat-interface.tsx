@@ -16,9 +16,10 @@ interface ChatInterfaceProps {
     owner: string;
     repo: string;
     selectedFiles: string[];
+    embedded?: boolean;
 }
 
-export function ChatInterface({ owner, repo, selectedFiles }: ChatInterfaceProps) {
+export function ChatInterface({ owner, repo, selectedFiles, embedded }: ChatInterfaceProps) {
     const [messages, setMessages] = useState<Message[]>([
         { id: '1', role: 'assistant', content: `Hi! I'm your DevOne mentor for ${repo}. How can I help you understand this codebase?` }
     ]);
@@ -85,11 +86,11 @@ export function ChatInterface({ owner, repo, selectedFiles }: ChatInterfaceProps
     };
 
     return (
-        <div className="flex flex-col h-full bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-lg">
-            <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center shrink-0">
+        <div className={cn("flex flex-col h-full overflow-hidden", embedded ? "bg-transparent" : "bg-slate-800 rounded-xl border border-slate-700 shadow-lg")}>
+            <div className="p-4 border-b border-white/5 flex justify-between items-center shrink-0">
                 <h3 className="font-semibold text-white flex items-center gap-2">
                     <Bot size={18} className="text-blue-400" />
-                    DevOne Mentor
+                    Repository Mentor
                 </h3>
             </div>
 
@@ -132,7 +133,7 @@ export function ChatInterface({ owner, repo, selectedFiles }: ChatInterfaceProps
                 <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-4 bg-slate-800/80 border-t border-slate-700">
+            <div className="p-4 border-t border-white/5">
                 {error && (
                     <div className="mb-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
                         <AlertCircle size={16} className="shrink-0 mt-0.5" />

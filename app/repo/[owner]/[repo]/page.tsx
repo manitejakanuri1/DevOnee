@@ -1,63 +1,63 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+    Menu, X, MessageCircle, Shield, GitBranch,
+    FileText, Bot,
+} from 'lucide-react';
+
 import { FileExplorer } from '@/components/file-explorer';
 import { ChatInterface } from '@/components/chat-interface';
-import { ChallengeBoard } from '@/components/challenge-board';
-import { DependencyGraph } from '@/components/dependency-graph';
-import { ContributeSandbox } from '@/components/contribute-sandbox';
-import { DryRunPanel } from '@/components/dry-run-panel';
-import { Stats01, StatData } from '@/components/ui/stats-cards';
-import {
-    Sparkles, GitBranch, Shield, Activity,
-    LayoutDashboard, Trophy, Share2, Terminal,
-} from 'lucide-react';
-import { motion } from 'framer-motion';
+import { RepoUrlInput } from '@/components/repo-dashboard/repo-url-input';
+import { RepoStatsCard } from '@/components/repo-dashboard/repo-stats-card';
+import { HealthScoreVisual } from '@/components/repo-dashboard/health-score-visual';
+import { ReadmePreview } from '@/components/repo-dashboard/readme-preview';
+import { FileViewer } from '@/components/repo-dashboard/file-viewer';
 
-type Tab = 'overview' | 'challenges' | 'map' | 'contribute';
+export default function RepositoryDashboard({ params }: { params: { owner: string; repo: string } }) {
+    const router = useRouter();
 
-export default function RepositoryDashboard({ params }: { params: { owner: string, repo: string } }) {
-    const { owner, repo } = params;
+    // Core repo state
+    const [owner, setOwner] = useState(params.owner);
+    const [repo, setRepo] = useState(params.repo);
+    const [branch, setBranch] = useState('main');
 
-    const [activeTab, setActiveTab] = useState<Tab>('overview');
-    const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+    // Data state
     const [overview, setOverview] = useState<string | null>(null);
     const [healthScore, setHealthScore] = useState<number | null>(null);
+    const [healthMetrics, setHealthMetrics] = useState<Record<string, any> | null>(null);
+    const [repoMetadata, setRepoMetadata] = useState<any>(null);
 
-    // Challenge -> Contribute flow
-    const [selectedChallenge, setSelectedChallenge] = useState<any>(null);
-    const [showDryRun, setShowDryRun] = useState(false);
-    const [dryRunChallenge, setDryRunChallenge] = useState<any>(null);
+    // File state
+    const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+    const [activeFile, setActiveFile] = useState<string | null>(null);
 
-    const [overviewStats, setOverviewStats] = useState<StatData[]>([
-        { title: "Files Indexed", value: "...", change: 0, trend: "neutral" },
-        { title: "Chat Queries", value: "...", change: 0, trend: "neutral" },
-        { title: "Plans Generated", value: "...", change: 0, trend: "neutral" },
-        { title: "Health Score", value: "...", change: 0, trend: "neutral" }
-    ]);
+    // Responsive panel state
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [chatOpen, setChatOpen] = useState(false);
 
+    // Fetch all data when owner/repo changes
     useEffect(() => {
+        setOverview(null);
+        setHealthScore(null);
+        setHealthMetrics(null);
+        setRepoMetadata(null);
+        setActiveFile(null);
+        setSelectedFiles([]);
+
+        // Fetch overview
         fetch('/api/repo/overview', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ owner, repo })
         })
             .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    setOverview(data.overview);
-                    if (data.stats) {
-                        setOverviewStats(prev => [
-                            { title: "Files Indexed", value: data.stats.filesIndexed.toString(), change: 8, trend: "up" },
-                            { title: "Chat Queries", value: data.stats.chatQueries.toString(), change: 24, trend: "up" },
-                            { title: "Plans Generated", value: data.stats.plansGenerated.toString(), change: -2, trend: "down" },
-                            prev.find(s => s.title === "Health Score") || { title: "Health Score", value: "...", change: 0, trend: "neutral" }
-                        ]);
-                    }
-                }
-            })
+            .then(data => { if (data.success) setOverview(data.overview); })
             .catch(console.error);
 
+        // Fetch health
         fetch('/api/repo/health', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -65,182 +65,221 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
         })
             .then(res => res.json())
             .then(data => {
-                if (data.success && data.healthScore !== undefined) {
-                    setHealthScore(data.healthScore);
-                    setOverviewStats(prev => prev.map(stat =>
-                        stat.title === "Health Score" ? { ...stat, value: `${data.healthScore}/100` } : stat
-                    ));
+                if (data.success) {
+                    setHealthScore(data.healthScore ?? null);
+                    setHealthMetrics(data.metrics ?? null);
                 }
+            })
+            .catch(console.error);
+
+        // Fetch metadata from GitHub API via our proxy
+        fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+            headers: { 'Accept': 'application/vnd.github.v3+json' }
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.default_branch) setBranch(data.default_branch);
+                setRepoMetadata(data);
             })
             .catch(console.error);
     }, [owner, repo]);
 
-    const handleSelectChallenge = (challenge: any) => {
-        setSelectedChallenge(challenge);
-        setActiveTab('contribute');
+    const handleRepoNavigate = (newOwner: string, newRepo: string) => {
+        setOwner(newOwner);
+        setRepo(newRepo);
+        router.push(`/repo/${newOwner}/${newRepo}`);
     };
 
-    const handleDryRun = (challenge: any) => {
-        setDryRunChallenge(challenge);
-        setShowDryRun(true);
-        setActiveTab('contribute');
+    const handleFileClick = (filePath: string) => {
+        setActiveFile(filePath);
+        setSidebarOpen(false);
     };
-
-    const TABS: { key: Tab; label: string; icon: any }[] = [
-        { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-        { key: 'challenges', label: 'Challenges', icon: Trophy },
-        { key: 'map', label: 'Codebase Map', icon: Share2 },
-        { key: 'contribute', label: 'Contribute', icon: Terminal },
-    ];
 
     return (
-        <div className="min-h-screen bg-[#0f172a] text-slate-50 flex flex-col font-sans">
-            {/* Header */}
-            <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-10">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <a href="/" className="w-8 h-8 rounded-lg outline outline-1 outline-slate-700 bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-sm">
-                            D1
-                        </a>
-                        <h1 className="text-xl font-semibold flex items-center gap-2">
-                            <span className="text-slate-400 font-normal">{owner}</span>
-                            <span className="text-slate-600">/</span>
-                            {repo}
-                        </h1>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm">
-                        <div className="flex items-center gap-2 text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700">
-                            <Shield size={14} className="text-green-400" /> Score: <span className="text-white font-medium">{healthScore !== null ? `${healthScore}/100` : '...'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-slate-400 bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-700">
-                            <GitBranch size={14} className="text-blue-400" /> Default: <span className="text-white font-medium">main</span>
-                        </div>
-                    </div>
+        <div className="h-screen bg-[#0B1120] text-slate-50 flex flex-col overflow-hidden">
+            {/* ── Header ── */}
+            <header className="h-14 border-b border-white/5 bg-[#0B1120]/80 backdrop-blur-xl sticky top-0 z-30 flex items-center px-4 gap-3 shrink-0">
+                {/* Mobile sidebar toggle */}
+                <button onClick={() => setSidebarOpen(true)} className="lg:hidden shrink-0 w-8 h-8 rounded-lg hover:bg-white/5 flex items-center justify-center">
+                    <Menu size={18} className="text-slate-400" />
+                </button>
+
+                {/* Logo */}
+                <a href="/" className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-xs shrink-0">
+                    D1
+                </a>
+
+                {/* Repo name */}
+                <h1 className="text-sm font-medium truncate">
+                    <span className="text-slate-400">{owner}</span>
+                    <span className="text-slate-600 mx-1">/</span>
+                    <span className="text-white">{repo}</span>
+                </h1>
+
+                <div className="flex-1" />
+
+                {/* Badges */}
+                <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 bg-white/5 px-2.5 py-1.5 rounded-full">
+                    <Shield size={12} className="text-green-400" />
+                    <span className="text-white font-medium">{healthScore !== null ? `${healthScore}/100` : '...'}</span>
+                </div>
+                <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 bg-white/5 px-2.5 py-1.5 rounded-full">
+                    <GitBranch size={12} className="text-blue-400" />
+                    <span className="text-white font-medium">{branch}</span>
                 </div>
 
-                {/* Tab Navigation */}
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex gap-1 -mb-px">
-                        {TABS.map(tab => {
-                            const Icon = tab.icon;
-                            const isActive = activeTab === tab.key;
-                            return (
-                                <button
-                                    key={tab.key}
-                                    onClick={() => setActiveTab(tab.key)}
-                                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                                        isActive
-                                            ? 'border-blue-500 text-blue-400'
-                                            : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600'
-                                    }`}
-                                >
-                                    <Icon size={16} />
-                                    {tab.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
+                {/* Mobile chat toggle */}
+                <button onClick={() => setChatOpen(true)} className="lg:hidden shrink-0 w-8 h-8 rounded-lg hover:bg-white/5 flex items-center justify-center">
+                    <MessageCircle size={18} className="text-slate-400" />
+                </button>
             </header>
 
-            <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col md:flex-row gap-8">
-                {/* Left Content Area */}
-                <div className="flex-1 min-w-0 flex flex-col gap-6">
+            {/* ── Main 3-Panel Area ── */}
+            <div className="flex-1 flex overflow-hidden">
 
-                    {/* Overview Tab */}
-                    {activeTab === 'overview' && (
+                {/* ── LEFT SIDEBAR (Desktop) ── */}
+                <aside className="hidden lg:flex flex-col w-[280px] border-r border-white/5 bg-[#0B1120] shrink-0">
+                    <FileExplorer
+                        owner={owner}
+                        repo={repo}
+                        branch={branch}
+                        selectedFiles={selectedFiles}
+                        onSelectFiles={setSelectedFiles}
+                        onFileClick={handleFileClick}
+                    />
+                </aside>
+
+                {/* ── Mobile Sidebar Drawer ── */}
+                <AnimatePresence>
+                    {sidebarOpen && (
                         <>
-                            <div className="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 md:p-8 mt-2">
-                                <h2 className="text-2xl font-bold mb-4 text-white">Project Summary</h2>
-                                {overview ? (
-                                    <p className="text-lg text-slate-300 leading-relaxed max-w-4xl">{overview}</p>
-                                ) : (
-                                    <div className="animate-pulse space-y-3 max-w-4xl">
-                                        <div className="h-4 bg-slate-700 rounded w-full"></div>
-                                        <div className="h-4 bg-slate-700 rounded w-5/6"></div>
-                                        <div className="h-4 bg-slate-700 rounded w-4/6"></div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <Stats01 data={overviewStats} className="shadow-xl" />
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-2xl p-6 group hover:border-blue-500/30 transition-colors">
-                                    <FileExplorer owner={owner} repo={repo} selectedFiles={selectedFiles} onSelectFiles={setSelectedFiles} />
-                                </div>
-                                <div className="bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-slate-700 rounded-2xl p-6 flex flex-col items-center justify-center text-center">
-                                    <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mb-4">
-                                        <Sparkles size={32} className="text-blue-400" />
-                                    </div>
-                                    <h3 className="text-xl font-bold mb-2">Ready to contribute?</h3>
-                                    <p className="text-slate-400 mb-6 max-w-[250px]">
-                                        Browse AI-generated challenges tailored to this repo.
-                                    </p>
-                                    <button
-                                        onClick={() => setActiveTab('challenges')}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-lg shadow-blue-500/20"
-                                    >
-                                        View Challenges
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+                                onClick={() => setSidebarOpen(false)}
+                            />
+                            <motion.aside
+                                initial={{ x: -300 }}
+                                animate={{ x: 0 }}
+                                exit={{ x: -300 }}
+                                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                                className="fixed left-0 top-0 bottom-0 w-[280px] bg-[#0B1120] border-r border-white/5 z-50 lg:hidden flex flex-col"
+                            >
+                                <div className="h-14 flex items-center justify-between px-4 border-b border-white/5 shrink-0">
+                                    <span className="font-semibold text-sm">Files</span>
+                                    <button onClick={() => setSidebarOpen(false)} className="w-7 h-7 rounded-lg hover:bg-white/5 flex items-center justify-center">
+                                        <X size={16} className="text-slate-400" />
                                     </button>
                                 </div>
-                            </div>
-                        </>
-                    )}
-
-                    {/* Challenges Tab */}
-                    {activeTab === 'challenges' && (
-                        <ChallengeBoard
-                            owner={owner}
-                            repo={repo}
-                            onSelectChallenge={handleSelectChallenge}
-                            onDryRun={handleDryRun}
-                        />
-                    )}
-
-                    {/* Codebase Map Tab */}
-                    {activeTab === 'map' && (
-                        <DependencyGraph owner={owner} repo={repo} />
-                    )}
-
-                    {/* Contribute Tab */}
-                    {activeTab === 'contribute' && (
-                        <div className="space-y-6">
-                            {showDryRun && dryRunChallenge && (
-                                <DryRunPanel
+                                <FileExplorer
                                     owner={owner}
                                     repo={repo}
-                                    filePath={dryRunChallenge.target_files?.[0] || ''}
-                                    originalContent=""
-                                    newContent="// Your changes here"
-                                    challengeId={dryRunChallenge.id}
-                                    onContribute={() => {
-                                        setSelectedChallenge(dryRunChallenge);
-                                        setShowDryRun(false);
-                                    }}
+                                    branch={branch}
+                                    selectedFiles={selectedFiles}
+                                    onSelectFiles={setSelectedFiles}
+                                    onFileClick={handleFileClick}
                                 />
-                            )}
+                            </motion.aside>
+                        </>
+                    )}
+                </AnimatePresence>
 
-                            <ContributeSandbox
+                {/* ── CENTER PANEL ── */}
+                <main className="flex-1 overflow-y-auto panel-scroll">
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+                        {/* Repo URL Input */}
+                        <RepoUrlInput currentOwner={owner} currentRepo={repo} onNavigate={handleRepoNavigate} />
+
+                        {activeFile ? (
+                            /* File Viewer */
+                            <FileViewer
                                 owner={owner}
                                 repo={repo}
-                                suggestion={selectedChallenge ? {
-                                    title: selectedChallenge.title,
-                                    description: selectedChallenge.description,
-                                    files: selectedChallenge.target_files || [],
-                                    steps: selectedChallenge.steps || [],
-                                } : null}
-                                challengeId={selectedChallenge?.id}
+                                filePath={activeFile}
+                                branch={branch}
+                                onClose={() => setActiveFile(null)}
                             />
-                        </div>
-                    )}
-                </div>
+                        ) : (
+                            <>
+                                {/* Project Summary */}
+                                <div className="glass-card rounded-2xl p-6">
+                                    <h2 className="text-xl font-bold mb-3 text-white">Project Summary</h2>
+                                    {overview ? (
+                                        <p className="text-slate-300 leading-relaxed">{overview}</p>
+                                    ) : (
+                                        <div className="space-y-3 animate-pulse">
+                                            <div className="h-4 bg-white/5 rounded w-full" />
+                                            <div className="h-4 bg-white/5 rounded w-5/6" />
+                                            <div className="h-4 bg-white/5 rounded w-4/6" />
+                                        </div>
+                                    )}
+                                </div>
 
-                {/* Right Sidebar (Chat) */}
-                <div className="w-full md:w-[450px] lg:w-[500px] flex-shrink-0 flex flex-col h-[calc(100vh-10rem)] sticky top-28 z-10">
-                    <ChatInterface owner={owner} repo={repo} selectedFiles={selectedFiles} />
-                </div>
-            </main>
+                                {/* Repo Stats */}
+                                <RepoStatsCard metadata={repoMetadata} />
+
+                                {/* Health Score */}
+                                <div className="glass-card rounded-2xl p-6">
+                                    <h3 className="text-lg font-semibold text-white mb-4">Repository Health</h3>
+                                    <HealthScoreVisual score={healthScore} metrics={healthMetrics} />
+                                </div>
+
+                                {/* README */}
+                                <div className="glass-card rounded-2xl p-6">
+                                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                                        <FileText size={18} className="text-slate-400" />
+                                        README.md
+                                    </h3>
+                                    <ReadmePreview owner={owner} repo={repo} branch={branch} />
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </main>
+
+                {/* ── RIGHT PANEL - Chat (Desktop) ── */}
+                <aside className="hidden lg:flex flex-col w-[400px] border-l border-white/5 bg-[#0B1120] shrink-0">
+                    <ChatInterface owner={owner} repo={repo} selectedFiles={selectedFiles} embedded />
+                </aside>
+
+                {/* ── Mobile Chat Panel ── */}
+                <AnimatePresence>
+                    {chatOpen && (
+                        <>
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+                                onClick={() => setChatOpen(false)}
+                            />
+                            <motion.div
+                                initial={{ y: '100%' }}
+                                animate={{ y: 0 }}
+                                exit={{ y: '100%' }}
+                                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                                className="fixed left-0 right-0 bottom-0 h-[85vh] bg-[#0B1120] border-t border-white/5 rounded-t-2xl z-50 lg:hidden flex flex-col"
+                            >
+                                <div className="h-12 flex items-center justify-between px-4 border-b border-white/5 shrink-0">
+                                    <span className="font-semibold text-sm flex items-center gap-2">
+                                        <Bot size={16} className="text-blue-400" />
+                                        Repository Mentor
+                                    </span>
+                                    <button onClick={() => setChatOpen(false)} className="w-7 h-7 rounded-lg hover:bg-white/5 flex items-center justify-center">
+                                        <X size={16} className="text-slate-400" />
+                                    </button>
+                                </div>
+                                <div className="flex-1 min-h-0">
+                                    <ChatInterface owner={owner} repo={repo} selectedFiles={selectedFiles} embedded />
+                                </div>
+                            </motion.div>
+                        </>
+                    )}
+                </AnimatePresence>
+
+            </div>
         </div>
     );
 }
