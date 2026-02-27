@@ -61,9 +61,9 @@ function applyDagreLayout(
     direction: 'TB' | 'LR' = 'TB'
 ): { nodes: Node[]; edges: Edge[] } {
     const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-    g.setGraph({ rankdir: direction, nodesep: 70, ranksep: 100, edgesep: 30 });
+    g.setGraph({ rankdir: direction, nodesep: 100, ranksep: 140, edgesep: 40 });
 
-    rawNodes.forEach(n => g.setNode(n.id, { width: 200, height: 85 }));
+    rawNodes.forEach(n => g.setNode(n.id, { width: 220, height: 95 }));
     rawEdges.forEach(e => g.setEdge(e.source, e.target));
 
     Dagre.layout(g);
@@ -97,7 +97,7 @@ function detectEntryPoints(nodes: Node[], edges: Edge[]): Set<string> {
 
 /* ── Compute folder groups from laid-out nodes ── */
 function computeFolderGroups(nodes: Node[]): Node[] {
-    const PAD = 30;
+    const PAD = 40;
     const groups = new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>();
 
     nodes.forEach(n => {
@@ -119,10 +119,10 @@ function computeFolderGroups(nodes: Node[]): Node[] {
         if (cur) {
             cur.minX = Math.min(cur.minX, x);
             cur.minY = Math.min(cur.minY, y);
-            cur.maxX = Math.max(cur.maxX, x + 200);
-            cur.maxY = Math.max(cur.maxY, y + 85);
+            cur.maxX = Math.max(cur.maxX, x + 220);
+            cur.maxY = Math.max(cur.maxY, y + 95);
         } else {
-            groups.set(folder, { minX: x, minY: y, maxX: x + 200, maxY: y + 85 });
+            groups.set(folder, { minX: x, minY: y, maxX: x + 220, maxY: y + 95 });
         }
     });
 
@@ -298,7 +298,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
     /* ── Loading ── */
     if (loading) {
         return (
-            <div className="w-full h-[650px] bg-[#0a0a0f] rounded-2xl border border-white/[0.06] flex flex-col items-center justify-center text-slate-400">
+            <div className="w-full h-[calc(100vh-180px)] min-h-[500px] bg-[#0a0a0f] rounded-2xl border border-white/[0.06] flex flex-col items-center justify-center text-slate-400">
                 <Loader2 className="animate-spin mb-4" size={32} />
                 <p style={{ fontFamily: "ui-monospace, 'JetBrains Mono', monospace" }}>Analyzing import relationships...</p>
                 <p className="text-xs text-slate-600 mt-1" style={{ fontFamily: "ui-monospace, 'JetBrains Mono', monospace" }}>Parsing source code across all languages</p>
@@ -309,7 +309,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
     /* ── Error ── */
     if (error) {
         return (
-            <div className="w-full h-[650px] bg-[#0a0a0f] rounded-2xl border border-white/[0.06] flex flex-col items-center justify-center text-slate-400">
+            <div className="w-full h-[calc(100vh-180px)] min-h-[500px] bg-[#0a0a0f] rounded-2xl border border-white/[0.06] flex flex-col items-center justify-center text-slate-400">
                 <AlertCircle className="mb-4 text-red-400" size={32} />
                 <p className="text-red-400 font-medium">Failed to generate flowchart</p>
                 <p className="text-xs text-slate-500 mt-1 max-w-md text-center">{error}</p>
@@ -320,7 +320,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
     /* ── Empty ── */
     if (fileNodes.length === 0) {
         return (
-            <div className="w-full h-[650px] bg-[#0a0a0f] rounded-2xl border border-white/[0.06] flex flex-col items-center justify-center text-slate-400">
+            <div className="w-full h-[calc(100vh-180px)] min-h-[500px] bg-[#0a0a0f] rounded-2xl border border-white/[0.06] flex flex-col items-center justify-center text-slate-400">
                 <Network className="mb-4" size={32} />
                 <p className="font-medium">No file relationships found</p>
                 <p className="text-xs text-slate-600 mt-1">This repository may be empty or use an unsupported structure</p>
@@ -330,7 +330,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
 
     /* ═════════════ MAIN RENDER ═════════════ */
     return (
-        <div className="w-full h-[650px] rounded-2xl overflow-hidden relative" style={{ background: '#0a0a0f' }}>
+        <div className="w-full rounded-2xl overflow-hidden relative" style={{ background: '#0a0a0f', height: 'calc(100vh - 180px)', minHeight: '500px' }}>
             {/* Keyframe styles */}
             <style>{`
                 @keyframes pulse-ring {
@@ -410,8 +410,8 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                 onPaneClick={onPaneClick}
                 nodeTypes={nodeTypes}
                 fitView
-                fitViewOptions={{ padding: 0.3 }}
-                minZoom={0.15}
+                fitViewOptions={{ padding: 0.4, minZoom: 0.4, maxZoom: 1.2 }}
+                minZoom={0.2}
                 maxZoom={2.5}
                 proOptions={{ hideAttribution: true }}
                 defaultEdgeOptions={{
