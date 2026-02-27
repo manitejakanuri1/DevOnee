@@ -89,6 +89,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
     const [overview, setOverview] = useState<string | null>(null);
     const [healthScore, setHealthScore] = useState<number | null>(null);
     const [healthMetrics, setHealthMetrics] = useState<Record<string, any> | null>(null);
+    const [healthBreakdown, setHealthBreakdown] = useState<Record<string, any> | null>(null);
     const [repoMetadata, setRepoMetadata] = useState<any>(null);
 
     // File state
@@ -123,6 +124,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
         setOverview(null);
         setHealthScore(null);
         setHealthMetrics(null);
+        setHealthBreakdown(null);
         setRepoMetadata(null);
         setActiveFile(null);
         setSelectedFiles([]);
@@ -157,6 +159,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                 if (data.success) {
                     setHealthScore(data.healthScore ?? null);
                     setHealthMetrics(data.metrics ?? null);
+                    setHealthBreakdown(data.breakdown ?? null);
                 }
             })
             .catch(console.error);
@@ -588,7 +591,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                                         {/* Health Score */}
                                         <div className="glass-card rounded-2xl p-6">
                                             <h3 className="text-lg font-semibold text-white mb-4">Repository Health</h3>
-                                            <HealthScoreVisual score={healthScore} metrics={healthMetrics} />
+                                            <HealthScoreVisual score={healthScore} metrics={healthMetrics} breakdown={healthBreakdown} />
                                         </div>
 
                                         {/* README */}

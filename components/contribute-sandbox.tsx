@@ -1,11 +1,67 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Terminal, Send, CheckCircle2, AlertTriangle, Loader2, GitPullRequest, GitFork, GitBranch, FileCode, ExternalLink, Trophy, FlaskConical } from 'lucide-react';
+import {
+    Terminal, Send, CheckCircle2, AlertTriangle, Loader2, GitPullRequest,
+    GitFork, GitBranch, FileCode, ExternalLink, Trophy, FlaskConical,
+    ArrowRight, Languages, Sparkles, RotateCcw, Download
+} from 'lucide-react';
 import { GithubDiff, DiffLine } from '@/components/ui/github-inline-diff';
 import { useSession, signIn } from 'next-auth/react';
 import { TestSandbox } from '@/components/sandbox/test-sandbox';
+import { safePath } from '@/lib/path-utils';
+
+// Lazy-load Monaco Editor (requires browser APIs — cannot SSR)
+const MonacoEditor = dynamic(() => import('@monaco-editor/react').then(mod => mod.default), {
+    ssr: false,
+    loading: () => (
+        <div className="w-full h-[400px] bg-[#1e1e1e] flex items-center justify-center">
+            <Loader2 className="animate-spin text-slate-500" size={24} />
+        </div>
+    ),
+});
+
+// Language maps
+const monacoLangMap: Record<string, string> = {
+    ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
+    py: 'python', rb: 'ruby', rs: 'rust', go: 'go',
+    java: 'java', kt: 'kotlin', swift: 'swift', c: 'c',
+    cpp: 'cpp', cs: 'csharp', php: 'php', sh: 'shell',
+    md: 'markdown', json: 'json', yaml: 'yaml', yml: 'yaml',
+    html: 'html', css: 'css', scss: 'scss', sql: 'sql',
+};
+
+const TARGET_LANGUAGES = [
+    { value: 'javascript', label: 'JavaScript' },
+    { value: 'typescript', label: 'TypeScript' },
+    { value: 'python', label: 'Python' },
+    { value: 'go', label: 'Go' },
+    { value: 'rust', label: 'Rust' },
+    { value: 'java', label: 'Java' },
+    { value: 'cpp', label: 'C++' },
+    { value: 'ruby', label: 'Ruby' },
+    { value: 'php', label: 'PHP' },
+    { value: 'csharp', label: 'C#' },
+    { value: 'swift', label: 'Swift' },
+    { value: 'kotlin', label: 'Kotlin' },
+];
+
+function getMonacoLanguage(filePath: string): string {
+    const ext = filePath.split('.').pop()?.toLowerCase() || '';
+    const name = filePath.split('/').pop()?.toLowerCase() || '';
+    if (name === 'dockerfile') return 'dockerfile';
+    if (name === 'makefile') return 'shell';
+    return monacoLangMap[ext] || 'plaintext';
+}
+
+function getLangLabel(langId: string): string {
+    const match = TARGET_LANGUAGES.find(l => l.value === langId);
+    return match?.label || langId;
+}
+
+// ────────────────────────────────────────────────────────────────
 
 interface ContributeSandboxProps {
     owner: string;
@@ -26,12 +82,27 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
     const { data: session } = useSession();
     const [activeTab, setActiveTab] = useState<'editor' | 'tests' | 'review'>('editor');
 
+    // File state
+    const [selectedFile, setSelectedFile] = useState(suggestion?.files?.[0] || '');
+    const [fileInput, setFileInput] = useState(suggestion?.files?.[0] || '');
+    const [originalContent, setOriginalContent] = useState('');
+    const [fileLoading, setFileLoading] = useState(false);
+
     // Editor state
     const [editorContent, setEditorContent] = useState(
         suggestion?.steps
             ? `// Task: ${suggestion.title}\n// File: ${suggestion.files?.[0] || 'src/index.ts'}\n\n// Make your changes here...\n`
-            : "// Make your changes here...\n\nfunction fixIssue() {\n  console.log('Fixed!');\n}"
+            : "// Select a file above or start editing here\n\nfunction main() {\n  console.log('Hello from DevOne!');\n}"
     );
+    const [detectedLanguage, setDetectedLanguage] = useState('typescript');
+
+    // Translation state
+    const [targetLanguage, setTargetLanguage] = useState('');
+    const [translating, setTranslating] = useState(false);
+
+    // Commit message state
+    const [commitMessage, setCommitMessage] = useState('');
+    const [commitMsgLoading, setCommitMsgLoading] = useState(false);
 
     // Review flow
     const [reviewLoading, setReviewLoading] = useState(false);
@@ -49,6 +120,93 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
         xpEarned?: number;
     } | null>(null);
     const [showConfirm, setShowConfirm] = useState(false);
+
+    // Update language when file changes
+    useEffect(() => {
+        if (selectedFile) {
+            setDetectedLanguage(getMonacoLanguage(selectedFile));
+        }
+    }, [selectedFile]);
+
+    // Load file on initial suggestion
+    useEffect(() => {
+        if (suggestion?.files?.[0]) {
+            loadFile(suggestion.files[0]);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const loadFile = async (filePath: string) => {
+        if (!filePath) return;
+        setFileLoading(true);
+        try {
+            const res = await fetch('/api/github/content', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ owner, repo, path: safePath(filePath), ref: 'main' })
+            });
+            const data = await res.json();
+            if (data.content !== undefined) {
+                setOriginalContent(data.content);
+                setEditorContent(data.content);
+                setSelectedFile(filePath);
+                setDetectedLanguage(getMonacoLanguage(filePath));
+            }
+        } catch {
+            // File fetch failed
+        } finally {
+            setFileLoading(false);
+        }
+    };
+
+    const handleTranslate = async () => {
+        if (!targetLanguage || !editorContent) return;
+        setTranslating(true);
+        try {
+            const res = await fetch('/api/ai/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: editorContent,
+                    sourceLanguage: detectedLanguage,
+                    targetLanguage,
+                })
+            });
+            const data = await res.json();
+            if (data.success && data.translatedCode) {
+                setEditorContent(data.translatedCode);
+                setDetectedLanguage(targetLanguage);
+            }
+        } catch {
+            // Translation failed
+        } finally {
+            setTranslating(false);
+        }
+    };
+
+    const handleGenerateCommitMsg = async () => {
+        setCommitMsgLoading(true);
+        try {
+            const res = await fetch('/api/ai/commit-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    originalContent,
+                    newContent: editorContent,
+                    filePath: selectedFile || 'src/index.ts',
+                    repoContext: `${owner}/${repo}`,
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setCommitMessage(data.commitMessage);
+            }
+        } catch {
+            // Commit message generation failed
+        } finally {
+            setCommitMsgLoading(false);
+        }
+    };
 
     const handleReview = async () => {
         setReviewLoading(true);
@@ -83,10 +241,11 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
         setPrStep(0);
 
         try {
-            // Simulate step progression for UX
             const stepInterval = setInterval(() => {
                 setPrStep(prev => Math.min(prev + 1, PR_STEPS.length - 1));
             }, 3000);
+
+            const prTitle = commitMessage || `DevOne: ${suggestion?.title || 'Automated contribution'}`;
 
             const res = await fetch('/api/contribution/create', {
                 method: 'POST',
@@ -95,11 +254,11 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
                     owner,
                     repo,
                     changes: [{
-                        path: suggestion?.files[0] || 'src/index.ts',
+                        path: selectedFile || suggestion?.files[0] || 'src/index.ts',
                         content: editorContent
                     }],
                     prDetails: {
-                        title: `DevOne: ${suggestion?.title || 'Automated contribution'}`,
+                        title: prTitle,
                         description: suggestion?.description || 'Contribution via DevOne AI platform',
                     },
                     challengeId: challengeId || null,
@@ -128,54 +287,147 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
         }
     };
 
+    const hasChanges = editorContent !== originalContent;
+
     return (
         <div className="bg-slate-800/80 border border-slate-700 rounded-2xl overflow-hidden mt-6 shadow-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Header */}
+            {/* Header with tabs */}
             <div className="bg-slate-900 border-b border-slate-700 p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
                 <h3 className="text-lg font-bold flex items-center gap-2 text-white">
                     <Terminal className="text-green-400" />
                     Contribution Sandbox
                 </h3>
                 <div className="flex gap-2">
-                    <button
-                        onClick={() => setActiveTab('editor')}
-                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'editor' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
-                    >
-                        Editor
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('tests')}
-                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'tests' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
-                    >
-                        <FlaskConical size={14} />
-                        Tests
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('review')}
-                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'review' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
-                    >
-                        AI Review
-                    </button>
+                    {(['editor', 'tests', 'review'] as const).map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                                activeTab === tab ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                            }`}
+                        >
+                            {tab === 'tests' && <FlaskConical size={14} />}
+                            {tab === 'editor' ? 'Editor' : tab === 'tests' ? 'Tests' : 'AI Review'}
+                        </button>
+                    ))}
                 </div>
             </div>
 
             {/* Content Area */}
-            <div className="p-0 border-b border-slate-700 min-h-[350px] flex flex-col bg-[#1e1e1e]">
+            <div className="border-b border-slate-700 min-h-[350px] flex flex-col bg-[#1e1e1e]">
                 {activeTab === 'editor' ? (
-                    <textarea
-                        value={editorContent}
-                        onChange={(e) => setEditorContent(e.target.value)}
-                        className="w-full h-full min-h-[350px] bg-transparent text-slate-300 font-mono p-4 focus:outline-none resize-y"
-                        spellCheck={false}
-                    />
+                    <>
+                        {/* File selector */}
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-900/80 border-b border-slate-700/50">
+                            <FileCode size={14} className="text-blue-400 shrink-0" />
+                            {suggestion?.files && suggestion.files.length > 1 ? (
+                                <select
+                                    value={fileInput}
+                                    onChange={(e) => { setFileInput(e.target.value); loadFile(e.target.value); }}
+                                    className="flex-1 bg-slate-800 text-sm text-slate-300 rounded-md px-2.5 py-1.5 border border-slate-600 focus:border-blue-500 focus:outline-none font-mono"
+                                >
+                                    {suggestion.files.map(f => (
+                                        <option key={f} value={f}>{f}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <input
+                                    type="text"
+                                    value={fileInput}
+                                    onChange={(e) => setFileInput(e.target.value)}
+                                    placeholder="Enter file path (e.g., src/utils.ts)"
+                                    className="flex-1 bg-slate-800 text-sm text-slate-300 rounded-md px-2.5 py-1.5 border border-slate-600 focus:border-blue-500 focus:outline-none font-mono"
+                                    onKeyDown={(e) => { if (e.key === 'Enter') loadFile(fileInput); }}
+                                />
+                            )}
+                            <button
+                                onClick={() => loadFile(fileInput)}
+                                disabled={fileLoading || !fileInput}
+                                className="px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                            >
+                                {fileLoading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                                Load
+                            </button>
+                            {originalContent && hasChanges && (
+                                <button
+                                    onClick={() => setEditorContent(originalContent)}
+                                    className="px-3 py-1.5 text-xs font-medium rounded-md bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors flex items-center gap-1.5"
+                                >
+                                    <RotateCcw size={12} />
+                                    Revert
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Translation bar */}
+                        <div className="flex items-center gap-3 px-4 py-2 bg-slate-900/50 border-b border-slate-700/50">
+                            <Languages size={14} className="text-purple-400 shrink-0" />
+                            <span className="text-xs text-slate-400 font-medium min-w-[80px]">
+                                {getLangLabel(detectedLanguage)}
+                            </span>
+                            <ArrowRight size={14} className="text-slate-600 shrink-0" />
+                            <select
+                                value={targetLanguage}
+                                onChange={(e) => setTargetLanguage(e.target.value)}
+                                className="bg-slate-800 text-xs text-slate-300 rounded-md px-2 py-1.5 border border-slate-600 focus:border-purple-500 focus:outline-none"
+                            >
+                                <option value="">Select target language</option>
+                                {TARGET_LANGUAGES.filter(l => l.value !== detectedLanguage).map(lang => (
+                                    <option key={lang.value} value={lang.value}>{lang.label}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={handleTranslate}
+                                disabled={translating || !targetLanguage}
+                                className="px-3 py-1.5 text-xs font-medium rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                            >
+                                {translating ? <Loader2 size={12} className="animate-spin" /> : <Languages size={12} />}
+                                Translate
+                            </button>
+                        </div>
+
+                        {/* Monaco Editor */}
+                        <MonacoEditor
+                            height="400px"
+                            language={detectedLanguage}
+                            theme="vs-dark"
+                            value={editorContent}
+                            onChange={(value) => setEditorContent(value || '')}
+                            options={{
+                                minimap: { enabled: false },
+                                fontSize: 13,
+                                lineNumbers: 'on',
+                                scrollBeyondLastLine: false,
+                                wordWrap: 'on',
+                                automaticLayout: true,
+                                padding: { top: 12 },
+                                renderLineHighlight: 'all',
+                            }}
+                        />
+
+                        {/* Commit message bar */}
+                        {commitMessage && (
+                            <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-900/80 border-t border-slate-700/50">
+                                <Sparkles size={14} className="text-yellow-400 shrink-0" />
+                                <input
+                                    type="text"
+                                    value={commitMessage}
+                                    onChange={(e) => setCommitMessage(e.target.value)}
+                                    className="flex-1 bg-slate-800 text-sm text-slate-300 rounded-md px-2.5 py-1.5 border border-slate-600 focus:border-yellow-500 focus:outline-none font-mono"
+                                    placeholder="Commit message..."
+                                />
+                            </div>
+                        )}
+                    </>
                 ) : activeTab === 'tests' ? (
                     <div className="min-h-[350px]">
                         <TestSandbox
                             fileContent={editorContent}
-                            fileName={suggestion?.files?.[0] || 'source.ts'}
+                            fileName={selectedFile || suggestion?.files?.[0] || 'source.ts'}
                         />
                     </div>
                 ) : (
+                    /* ── AI Review Tab (fully preserved) ── */
                     <div className="p-6 h-full flex flex-col h-[350px] overflow-y-auto bg-slate-900">
                         {reviewLoading ? (
                             <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
@@ -191,7 +443,7 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
                                 {diffLines && (
                                     <div className="mt-6 mb-4">
                                         <GithubDiff
-                                            fileName={suggestion?.files[0] || 'src/index.ts'}
+                                            fileName={selectedFile || suggestion?.files[0] || 'src/index.ts'}
                                             diffLines={diffLines}
                                             initialComments={{
                                                 0: [{
@@ -342,31 +594,62 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
                             </div>
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-slate-500 italic">
-                                No review requested yet.
+                                No review requested yet. Edit your code and click &quot;Submit to Review&quot;.
                             </div>
                         )}
                     </div>
                 )}
             </div>
 
-            {/* Footer */}
-            {(activeTab === 'editor' || activeTab === 'tests') && (
-                <div className="bg-slate-900 p-4 flex justify-between items-center">
-                    <div className="text-sm text-slate-400 flex items-center gap-2">
-                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        {activeTab === 'tests' ? 'Write and run tests against your code' : 'Ready to submit'}
-                    </div>
-                    {activeTab === 'editor' && (
+            {/* Footer toolbar */}
+            <div className="bg-slate-900 p-4 flex flex-wrap justify-between items-center gap-3">
+                <div className="text-sm text-slate-400 flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full animate-pulse ${hasChanges ? 'bg-yellow-500' : 'bg-green-500'}`} />
+                    {activeTab === 'tests'
+                        ? 'Write and run tests against your code'
+                        : hasChanges
+                            ? 'Unsaved changes'
+                            : 'Ready to submit'
+                    }
+                </div>
+                {activeTab === 'editor' && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                            onClick={handleGenerateCommitMsg}
+                            disabled={commitMsgLoading || !editorContent}
+                            className="px-3 py-2 text-sm font-medium rounded-lg bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-300 border border-yellow-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                        >
+                            {commitMsgLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                            AI Commit Message
+                        </button>
                         <button
                             onClick={handleReview}
-                            disabled={reviewLoading}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                            disabled={reviewLoading || !editorContent}
+                            className="px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50 flex items-center gap-1.5"
                         >
-                            Submit to Sandbox Review <Send size={16} />
+                            <Send size={14} />
+                            Submit to Review
                         </button>
-                    )}
-                </div>
-            )}
+                        {session ? (
+                            <button
+                                onClick={() => setShowConfirm(true)}
+                                disabled={prLoading || !editorContent}
+                                className="px-3 py-2 text-sm font-medium rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                                <GitPullRequest size={14} />
+                                Create PR
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => signIn('github')}
+                                className="px-3 py-2 text-sm font-medium rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors flex items-center gap-1.5"
+                            >
+                                Sign In to Push
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
