@@ -24,7 +24,7 @@ export default function HomePage() {
                     </nav>
                     <div className="flex items-center gap-4">
                         <NavbarAuthButton />
-                        <a href="#" className="hidden sm:inline-flex bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-colors border border-white/10">
+                        <a href="/dashboard" className="hidden sm:inline-flex bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-colors border border-white/10">
                             Get Started
                         </a>
                     </div>
@@ -47,10 +47,10 @@ export default function HomePage() {
                         </div>
                         <span className="font-semibold text-slate-400">© 2026 DevOne Inc.</span>
                     </div>
-                    <div className="flex gap-6 text-sm text-slate-500">
-                        <a href="#" className="hover:text-slate-300 transition-colors">Privacy Policy</a>
-                        <a href="#" className="hover:text-slate-300 transition-colors">Terms of Service</a>
-                        <a href="#" className="hover:text-slate-300 transition-colors">GitHub</a>
+                    <div className="flex gap-6 text-sm text-slate-400">
+                        <span className="hover:text-slate-200 transition-colors cursor-pointer">Privacy Policy</span>
+                        <span className="hover:text-slate-200 transition-colors cursor-pointer">Terms of Service</span>
+                        <a href="https://github.com/manitejakanuri1/DevOnee" target="_blank" rel="noopener noreferrer" className="hover:text-slate-200 transition-colors">GitHub</a>
                     </div>
                 </div>
             </footer>
