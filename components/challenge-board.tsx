@@ -15,6 +15,7 @@ import {
     Play,
     GitPullRequest,
     Zap,
+    AlertCircle,
 } from "lucide-react";
 
 interface Challenge {
@@ -71,6 +72,8 @@ export function ChallengeBoard({ owner, repo, onSelectChallenge, onDryRun }: Cha
     const [xpData, setXpData] = useState<XPData | null>(null);
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [generateError, setGenerateError] = useState<string | null>(null);
 
     useEffect(() => {
         loadChallenges();
@@ -78,17 +81,34 @@ export function ChallengeBoard({ owner, repo, onSelectChallenge, onDryRun }: Cha
     }, [owner, repo]);
 
     const loadChallenges = async () => {
+        setError(null);
         try {
             const res = await fetch("/api/challenges/list", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ owner, repo }),
             });
+
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                if (res.status === 404) {
+                    setError("This repository hasn't been indexed yet. Please index it from the Overview tab first, then come back to generate challenges.");
+                } else {
+                    setError(errorData.message || errorData.error || `Failed to load challenges (${res.status})`);
+                }
+                console.error("Challenges list error:", res.status, errorData);
+                return;
+            }
+
             const data = await res.json();
             if (data.success) {
                 setChallenges(data.challenges);
+            } else {
+                setError(data.error || "Failed to load challenges");
             }
-        } catch {
+        } catch (err: any) {
+            console.error("Network error loading challenges:", err);
+            setError("Network error. Please check your connection and try again.");
         } finally {
             setLoading(false);
         }
@@ -97,24 +117,51 @@ export function ChallengeBoard({ owner, repo, onSelectChallenge, onDryRun }: Cha
     const loadXP = async () => {
         try {
             const res = await fetch("/api/user/xp");
+            if (!res.ok) {
+                console.error("XP fetch failed:", res.status);
+                return;
+            }
             const data = await res.json();
             if (data.success) setXpData(data);
-        } catch {}
+        } catch (err) {
+            console.error("Network error loading XP:", err);
+        }
     };
 
     const handleGenerate = async () => {
         setGenerating(true);
+        setGenerateError(null);
         try {
             const res = await fetch("/api/challenges/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ owner, repo }),
             });
+
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                if (res.status === 401) {
+                    setGenerateError("You must be signed in to generate challenges.");
+                } else if (res.status === 404) {
+                    setGenerateError("Repository not indexed. Please index the repo from the Overview tab first.");
+                } else {
+                    setGenerateError(errorData.message || errorData.error || `Generation failed (${res.status})`);
+                }
+                console.error("Challenge generation error:", res.status, errorData);
+                return;
+            }
+
             const data = await res.json();
             if (data.success) {
                 setChallenges(data.challenges);
+                setError(null);
+                setGenerateError(null);
+            } else {
+                setGenerateError(data.error || "Failed to generate challenges");
             }
-        } catch {
+        } catch (err: any) {
+            console.error("Network error generating challenges:", err);
+            setGenerateError("Network error. Please check your connection and try again.");
         } finally {
             setGenerating(false);
         }
@@ -125,6 +172,30 @@ export function ChallengeBoard({ owner, repo, onSelectChallenge, onDryRun }: Cha
             <div className="flex items-center justify-center py-16 text-slate-400">
                 <Loader2 className="animate-spin mr-3" size={24} />
                 Loading challenges...
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="space-y-6">
+                <div className="text-center py-12 space-y-4">
+                    <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto">
+                        <AlertCircle className="text-red-400" size={32} />
+                    </div>
+                    <p className="text-red-400 font-medium">Failed to load challenges</p>
+                    <p className="text-sm text-slate-400 max-w-md mx-auto">{error}</p>
+                    <button
+                        onClick={() => {
+                            setLoading(true);
+                            setError(null);
+                            loadChallenges();
+                        }}
+                        className="bg-slate-700 hover:bg-slate-600 text-slate-200 px-5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                    >
+                        <RefreshCw size={16} /> Retry
+                    </button>
+                </div>
             </div>
         );
     }
@@ -192,6 +263,12 @@ export function ChallengeBoard({ owner, repo, onSelectChallenge, onDryRun }: Cha
                             <><Zap size={18} /> Generate AI Challenges</>
                         )}
                     </button>
+                    {generateError && (
+                        <div className="mt-4 bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-400 max-w-md mx-auto flex items-start gap-2">
+                            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                            <span>{generateError}</span>
+                        </div>
+                    )}
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

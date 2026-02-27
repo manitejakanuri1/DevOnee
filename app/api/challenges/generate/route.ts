@@ -8,12 +8,12 @@ export async function POST(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
         if (!session || !session.user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json({ success: false, error: "Unauthorized. Please sign in." }, { status: 401 });
         }
 
         const { owner, repo } = await req.json();
         if (!owner || !repo) {
-            return NextResponse.json({ error: "Missing owner or repo" }, { status: 400 });
+            return NextResponse.json({ success: false, error: "Missing owner or repo" }, { status: 400 });
         }
 
         const supabase: any = createAdminClient();
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
         if (!repository) {
             return NextResponse.json(
-                { error: "Repository not found. Please index the repo first." },
+                { success: false, error: "Repository not found. Please index the repo first." },
                 { status: 404 }
             );
         }
@@ -132,7 +132,7 @@ ${contextText.substring(0, 20000)}
     } catch (error: any) {
         console.error("Challenges Generate API Error:", error);
         return NextResponse.json(
-            { error: "INTERNAL_SERVER_ERROR", message: error.message },
+            { success: false, error: "INTERNAL_SERVER_ERROR", message: error.message },
             { status: 500 }
         );
     }
