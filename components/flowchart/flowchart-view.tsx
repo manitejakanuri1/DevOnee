@@ -267,7 +267,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
 
             return {
                 ...e,
-                type: 'smoothstep',
+                type: 'default',
                 animated: connected,
                 markerEnd: {
                     type: MarkerType.ArrowClosed,
@@ -276,7 +276,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                     height: 12,
                 },
                 style: connected
-                    ? { stroke: '#818cf8', strokeWidth: 2.5 }
+                    ? { stroke: '#818cf8', strokeWidth: 2.5, strokeDasharray: '6 4' }
                     : dimmed
                         ? { stroke: 'rgba(148,163,184,0.06)', strokeWidth: 1 }
                         : { stroke: '#333', strokeWidth: 1.2, opacity: 0.4 },
@@ -415,7 +415,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                 maxZoom={2.5}
                 proOptions={{ hideAttribution: true }}
                 defaultEdgeOptions={{
-                    type: 'smoothstep',
+                    type: 'default',
                     style: { stroke: '#333', strokeWidth: 1.2, opacity: 0.4 },
                     markerEnd: { type: MarkerType.ArrowClosed, color: '#444', width: 16, height: 12 },
                 }}
@@ -491,6 +491,19 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                     <div>
                         <div style={{ fontSize: '10px', color: '#666', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Selected</div>
                         <div style={{ fontSize: '13px', fontWeight: 600, color: selectedInfo.color }}>{selectedInfo.label}</div>
+                    </div>
+
+                    <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.08)' }} />
+
+                    {/* Lines */}
+                    <div>
+                        <div style={{ fontSize: '10px', color: '#666', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Lines</div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#e8e8f0', marginTop: '2px' }}>
+                            {(() => {
+                                const node = nodes.find(n => n.id === selectedNodeId);
+                                return (node?.data as any)?.lines ?? '—';
+                            })()}
+                        </div>
                     </div>
 
                     <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.08)' }} />

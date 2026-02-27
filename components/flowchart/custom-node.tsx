@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 
 interface FileNodeData {
@@ -35,20 +35,23 @@ const TYPE_LABELS: Record<string, string> = {
 const DARK_TEXT_TYPES = new Set(['js', 'jsx', 'config']);
 
 function FileNode({ data }: CustomNodeProps) {
+    const [hovered, setHovered] = useState(false);
     const isDimmed = data.dimmed;
     const isActive = data.active;
     const isEntry = data.isEntry;
     const typeLabel = TYPE_LABELS[data.fileType] || data.fileType.slice(0, 3).toUpperCase();
     const darkText = DARK_TEXT_TYPES.has(data.fileType);
+    const lineCount = typeof data.lines === 'number' ? data.lines : 0;
     const importCount = typeof data.imports === 'number' ? data.imports : 0;
-    const usedByCount = typeof data.importedBy === 'number' ? data.importedBy : 0;
 
     return (
         <div
+            onMouseEnter={() => !isDimmed && setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
             style={{
                 opacity: isDimmed ? 0.12 : 1,
                 filter: isDimmed ? 'grayscale(0.8)' : 'none',
-                transform: isActive ? 'scale(1.06)' : isDimmed ? 'scale(0.95)' : 'scale(1)',
+                transform: isActive ? 'scale(1.06)' : hovered && !isDimmed ? 'scale(1.06)' : isDimmed ? 'scale(0.95)' : 'scale(1)',
                 transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
                 pointerEvents: isDimmed ? 'none' as const : 'auto' as const,
             }}
@@ -71,9 +74,11 @@ function FileNode({ data }: CustomNodeProps) {
                     cursor: 'pointer',
                     boxShadow: isActive
                         ? '0 0 30px rgba(99,102,241,0.2), 0 0 0 1px #818cf8'
-                        : isEntry && !isDimmed
-                            ? '0 0 16px rgba(99,102,241,0.15)'
-                            : '0 2px 8px rgba(0,0,0,0.3)',
+                        : hovered && !isDimmed
+                            ? '0 0 20px rgba(99,102,241,0.15), 0 0 0 1px rgba(129,140,248,0.3)'
+                            : isEntry && !isDimmed
+                                ? '0 0 16px rgba(99,102,241,0.15)'
+                                : '0 2px 8px rgba(0,0,0,0.3)',
                     animation: isEntry && !isDimmed && !isActive ? 'pulse-ring 2s infinite' : 'none',
                 }}
             >
@@ -130,10 +135,10 @@ function FileNode({ data }: CustomNodeProps) {
                     borderTop: '1px solid rgba(255,255,255,0.05)',
                 }}>
                     <div style={{ fontSize: '9.5px', color: '#555', fontFamily: "ui-monospace, 'JetBrains Mono', monospace" }}>
-                        <b style={{ color: '#999' }}>{importCount}</b> imports
+                        <b style={{ color: '#999' }}>{lineCount}</b> lines
                     </div>
                     <div style={{ fontSize: '9.5px', color: '#555', fontFamily: "ui-monospace, 'JetBrains Mono', monospace" }}>
-                        <b style={{ color: '#999' }}>{usedByCount}</b> used by
+                        <b style={{ color: '#999' }}>{importCount}</b> imports
                     </div>
                 </div>
             </div>
