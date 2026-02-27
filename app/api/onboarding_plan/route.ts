@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { getUserIdentity } from "@/lib/auth-guard";
+import { checkAndIncrementUsage } from "@/lib/usage";
 import { generateEmbedding } from "@/lib/embeddings";
 import { analyzePersona } from "@/lib/persona";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: NextRequest) {
     try {
+        const identity = await getUserIdentity();
+        const usage = await checkAndIncrementUsage(identity.userId, identity.isGuest, "onboarding_plan");
+        if (!usage.allowed) {
+            return NextResponse.json({ error: "LIMIT_EXCEEDED", message: usage.message }, { status: 429 });
+        }
+
         const { owner, repo, persona } = await req.json();
         if (!owner || !repo) {
             return NextResponse.json({ error: "Missing owner or repo" }, { status: 400 });
@@ -89,12 +97,13 @@ ${contextText.substring(0, 15000)} // Truncated to avoid huge limits
 
         const planData = JSON.parse(content);
 
-        // Save plan
+        // Save plan — scoped to current user
         const { data: savedPlan, error: saveError } = await supabase
             .from('onboarding_plans')
             .insert({
-                plan_data: planData
-                // note: ideally tie to profile_id / guest_id
+                plan_data: planData,
+                profile_id: identity.profileId || undefined,
+                guest_id: identity.guestId || undefined,
             } as any)
             .select('id')
             .single() as any;

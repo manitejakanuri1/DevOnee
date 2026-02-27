@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getUserIdentity } from "@/lib/auth-guard";
+import { checkAndIncrementUsage } from "@/lib/usage";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: NextRequest) {
     try {
+        const identity = await getUserIdentity();
+        const usage = await checkAndIncrementUsage(identity.userId, identity.isGuest, "review_simulate");
+        if (!usage.allowed) {
+            return NextResponse.json({ error: "LIMIT_EXCEEDED", message: usage.message }, { status: 429 });
+        }
+
         const { code, systemPrompt } = await req.json();
 
         if (!code) {

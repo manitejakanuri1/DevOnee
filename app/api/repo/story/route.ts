@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { getUserIdentity } from "@/lib/auth-guard";
+import { checkAndIncrementUsage } from "@/lib/usage";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: NextRequest) {
     try {
+        const identity = await getUserIdentity();
+        const usage = await checkAndIncrementUsage(identity.userId, identity.isGuest, "repo_story");
+        if (!usage.allowed) {
+            return NextResponse.json({ error: "LIMIT_EXCEEDED", message: usage.message }, { status: 429 });
+        }
+
         const { owner, repo } = await req.json();
         if (!owner || !repo) {
             return NextResponse.json({ error: "Missing owner or repo" }, { status: 400 });
@@ -73,7 +81,8 @@ Respond ONLY with valid JSON in this schema:
         if (repository) {
             await supabase.from('community_insights').insert({
                 title: `Evolution Story of ${repoFullName}`,
-                content: content, // Store the JSON blob
+                content: content,
+                author_id: identity.profileId || undefined,
             } as any);
         }
 

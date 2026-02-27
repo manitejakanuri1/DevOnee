@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { getUserIdentity } from "@/lib/auth-guard";
 
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
@@ -19,7 +20,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
     try {
-        const { title, content, author_id, repo } = await req.json();
+        const identity = await getUserIdentity();
+        const { title, content, repo } = await req.json();
 
         if (!title || !content) {
             return NextResponse.json({ error: "Title and content required" }, { status: 400 });
@@ -28,7 +30,8 @@ export async function POST(req: NextRequest) {
         const supabase = createAdminClient();
 
         const insertPayload: any = { title, content };
-        if (author_id) insertPayload.author_id = author_id;
+        // Attach author from session identity, not from client-supplied author_id
+        if (identity.profileId) insertPayload.author_id = identity.profileId;
         if (repo) insertPayload.title = `[${repo}] ${title}`;
 
         const { data, error } = await supabase.from('community_insights').insert(insertPayload).select().single();

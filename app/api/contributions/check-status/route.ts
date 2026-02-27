@@ -22,10 +22,12 @@ export async function POST(req: NextRequest) {
 
         const supabase: any = createAdminClient();
 
+        // Scope to current user's contributions only
         const { data: contribution } = await (supabase as any)
             .from("contributions")
             .select("*")
             .eq("id", contribution_id)
+            .eq("profile_id", session.user.id)
             .single();
 
         if (!contribution || !contribution.pr_url) {
@@ -66,11 +68,12 @@ export async function POST(req: NextRequest) {
             status = "closed";
         }
 
-        // Update in DB
+        // Update in DB — scoped to current user
         await (supabase as any)
             .from("contributions")
             .update({ status })
-            .eq("id", contribution_id);
+            .eq("id", contribution_id)
+            .eq("profile_id", session.user.id);
 
         return NextResponse.json({
             success: true,

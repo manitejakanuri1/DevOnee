@@ -1,4 +1,4 @@
-import { getGuestId } from './guest'
+import { getUserIdentity } from './auth-guard'
 import { createAdminClient } from './supabase/server'
 
 export const USAGE_LIMITS = {
@@ -17,8 +17,9 @@ export async function getUsageIdentifier(session: any = null): Promise<{ identif
     if (session && session.user && session.user.id) {
         return { identifier: session.user.id, isGuest: false }
     }
-    const guestId = getGuestId()
-    return { identifier: guestId, isGuest: true }
+    // Use auth-guard which reads session + guest cookie from middleware
+    const identity = await getUserIdentity()
+    return { identifier: identity.userId, isGuest: identity.isGuest }
 }
 
 export async function checkAndIncrementUsage(identifier: string, isGuest: boolean, endpoint: string): Promise<UsageResult> {
@@ -69,7 +70,7 @@ export async function checkAndIncrementUsage(identifier: string, isGuest: boolea
 // Higher-order function to wrap API handlers with usage tracking
 export function withUsageLimit(endpointName: string, handler: Function) {
     return async (req: Request, ...args: any[]) => {
-        // In a real app, you would pass the session here if using next-auth Server Sessions
+        // Properly resolves user identity from session or guest cookie
         const { identifier, isGuest } = await getUsageIdentifier()
         const usage = await checkAndIncrementUsage(identifier, isGuest, endpointName)
 

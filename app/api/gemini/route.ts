@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUsageIdentifier, checkAndIncrementUsage } from "@/lib/usage";
+import { getUserIdentity } from "@/lib/auth-guard";
+import { checkAndIncrementUsage } from "@/lib/usage";
 import { createAdminClient } from "@/lib/supabase/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: NextRequest) {
     try {
-        const { identifier, isGuest } = await getUsageIdentifier();
+        const identity = await getUserIdentity();
+        const { userId: identifier, isGuest } = identity;
         const usage = await checkAndIncrementUsage(identifier, isGuest, "gemini_chat");
 
         if (!usage.allowed) {

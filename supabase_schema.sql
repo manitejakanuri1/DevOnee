@@ -282,3 +282,125 @@ create policy "Users can view their own dry runs" on dry_run_results
   for select using (profile_id = auth.uid());
 create policy "Users can insert their own dry runs" on dry_run_results
   for insert with check (profile_id = auth.uid());
+
+-- ============================================
+-- USER TESTS TABLE (per-user test storage)
+-- ============================================
+
+create table user_tests (
+  id uuid default gen_random_uuid() primary key,
+  profile_id uuid references profiles(id) on delete cascade,
+  guest_id text,
+  repository_id uuid references repositories(id) on delete cascade not null,
+  test_name text not null,
+  test_code text not null,
+  test_result jsonb,
+  language text default 'javascript',
+  status text default 'pending' check (status in ('pending', 'running', 'passed', 'failed', 'error')),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index idx_user_tests_profile_id on user_tests(profile_id);
+create index idx_user_tests_guest_id on user_tests(guest_id);
+create index idx_user_tests_repository_id on user_tests(repository_id);
+
+alter table user_tests enable row level security;
+
+create policy "Users can view their own tests" on user_tests
+  for select using (
+    profile_id = auth.uid()
+    or (guest_id is not null and guest_id = current_setting('request.jwt.claims', true)::json->>'guest_id')
+  );
+
+create policy "Users can insert their own tests" on user_tests
+  for insert with check (
+    profile_id = auth.uid()
+    or guest_id is not null
+  );
+
+create policy "Users can update their own tests" on user_tests
+  for update using (
+    profile_id = auth.uid()
+    or (guest_id is not null and guest_id = current_setting('request.jwt.claims', true)::json->>'guest_id')
+  );
+
+-- ============================================
+-- COMPREHENSIVE RLS POLICIES (defense in depth)
+-- ============================================
+
+-- achievements: users see only their own
+create policy "Users can view their own achievements" on achievements
+  for select using (profile_id = auth.uid());
+
+-- contributions: users see only their own
+create policy "Users can view their own contributions" on contributions
+  for select using (profile_id = auth.uid());
+
+create policy "Users can insert their own contributions" on contributions
+  for insert with check (profile_id = auth.uid());
+
+-- repositories: anyone can read, owners can insert
+create policy "Anyone can view repositories" on repositories
+  for select using (true);
+
+create policy "Owners can insert repositories" on repositories
+  for insert with check (profile_id = auth.uid());
+
+-- embeddings: read access for all
+create policy "Anyone can view embeddings" on embeddings
+  for select using (true);
+
+-- health_scores: read access for all
+create policy "Anyone can view health scores" on health_scores
+  for select using (true);
+
+-- community_insights: anyone can read
+create policy "Anyone can view insights" on community_insights
+  for select using (true);
+
+create policy "Users can insert insights" on community_insights
+  for insert with check (author_id = auth.uid() or author_id is null);
+
+-- onboarding_plans: users see only their own
+create policy "Users can view their own plans" on onboarding_plans
+  for select using (
+    profile_id = auth.uid()
+    or (guest_id is not null and guest_id = current_setting('request.jwt.claims', true)::json->>'guest_id')
+  );
+
+create policy "Users can insert their own plans" on onboarding_plans
+  for insert with check (
+    profile_id = auth.uid()
+    or guest_id is not null
+  );
+
+-- chats: users see only their own
+create policy "Users can view their own chats" on chats
+  for select using (
+    profile_id = auth.uid()
+    or (guest_id is not null and guest_id = current_setting('request.jwt.claims', true)::json->>'guest_id')
+  );
+
+create policy "Users can insert their own chats" on chats
+  for insert with check (
+    profile_id = auth.uid()
+    or guest_id is not null
+  );
+
+-- feedback: users can insert, see their own
+create policy "Users can view their own feedback" on feedback
+  for select using (
+    profile_id = auth.uid()
+    or (guest_id is not null and guest_id = current_setting('request.jwt.claims', true)::json->>'guest_id')
+  );
+
+create policy "Users can insert feedback" on feedback
+  for insert with check (
+    profile_id = auth.uid()
+    or guest_id is not null
+  );
+
+-- team_members: members can view their own
+create policy "Members can view their memberships" on team_members
+  for select using (profile_id = auth.uid());
