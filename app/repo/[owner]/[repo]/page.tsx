@@ -372,8 +372,8 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
             {/* ── Main 3-Panel Area ── */}
             <div className="flex-1 flex overflow-hidden">
 
-                {/* ── LEFT SIDEBAR (Desktop) ── */}
-                <aside className="hidden lg:flex flex-col w-[280px] border-r border-white/5 bg-[#0B1120] shrink-0">
+                {/* ── LEFT SIDEBAR (Desktop) — hidden on Map tab ── */}
+                <aside className={`hidden lg:flex flex-col w-[280px] border-r border-white/5 bg-[#0B1120] shrink-0 ${activeTab === 'map' ? '!hidden' : ''}`}>
                     <FileExplorer
                         owner={owner}
                         repo={repo}
@@ -425,7 +425,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
                 {/* ── CENTER PANEL ── */}
                 <main className="flex-1 overflow-y-auto panel-scroll">
-                    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+                    <div className={activeTab === 'map' ? 'w-full h-full' : 'max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6'}>
 
                         {/* ── OVERVIEW TAB ── */}
                         {activeTab === 'overview' && (
@@ -731,8 +731,8 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                     </div>
                 </main>
 
-                {/* ── RIGHT PANEL - Chat (Desktop) ── */}
-                <aside className="hidden lg:flex flex-col w-[400px] border-l border-white/5 bg-[#0B1120] shrink-0">
+                {/* ── RIGHT PANEL - Chat (Desktop) — hidden on Map tab ── */}
+                <aside className={`hidden lg:flex flex-col w-[400px] border-l border-white/5 bg-[#0B1120] shrink-0 ${activeTab === 'map' ? '!hidden' : ''}`}>
                     <ChatInterface owner={owner} repo={repo} selectedFiles={selectedFiles} onRemoveFile={handleRemoveFile} embedded />
                 </aside>
 

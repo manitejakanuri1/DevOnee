@@ -59,13 +59,15 @@ function FileNode({ data }: CustomNodeProps) {
             <div
                 style={{
                     position: 'relative',
-                    background: 'rgba(20, 20, 30, 0.95)',
+                    background: isEntry && !isDimmed
+                        ? 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(20,20,30,0.95))'
+                        : 'rgba(20, 20, 30, 0.95)',
                     border: isActive
-                        ? '1.5px solid #818cf8'
+                        ? '2px solid #818cf8'
                         : isEntry && !isDimmed
-                            ? '1.5px solid #6366f1'
+                            ? '2px solid #6366f1'
                             : '1.5px solid rgba(255,255,255,0.08)',
-                    borderLeft: `3px solid ${data.color}`,
+                    borderLeft: isEntry && !isDimmed ? '4px solid #6366f1' : `3px solid ${data.color}`,
                     borderRadius: '12px',
                     padding: '10px 14px',
                     minWidth: '140px',
@@ -77,22 +79,25 @@ function FileNode({ data }: CustomNodeProps) {
                         : hovered && !isDimmed
                             ? '0 0 20px rgba(99,102,241,0.15), 0 0 0 1px rgba(129,140,248,0.3)'
                             : isEntry && !isDimmed
-                                ? '0 0 16px rgba(99,102,241,0.15)'
+                                ? '0 0 25px rgba(99,102,241,0.3), 0 0 50px rgba(99,102,241,0.1)'
                                 : '0 2px 8px rgba(0,0,0,0.3)',
                     animation: isEntry && !isDimmed && !isActive ? 'pulse-ring 2s infinite' : 'none',
                 }}
             >
-                {/* ENTRY badge */}
+                {/* ENTRY badge — prominent so user knows the starting point */}
                 {isEntry && !isDimmed && (
                     <div style={{
-                        position: 'absolute', top: '-8px', right: '-8px',
-                        background: '#6366f1', color: '#fff',
-                        fontSize: '8px', padding: '2px 6px', borderRadius: '6px',
+                        position: 'absolute', top: '-10px', right: '-10px',
+                        background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                        color: '#fff',
+                        fontSize: '9px', padding: '3px 8px', borderRadius: '8px',
                         fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
                         fontWeight: 700, textTransform: 'uppercase' as const,
-                        letterSpacing: '0.5px', zIndex: 10,
+                        letterSpacing: '0.8px', zIndex: 10,
+                        boxShadow: '0 0 12px rgba(99,102,241,0.5), 0 2px 8px rgba(0,0,0,0.3)',
+                        display: 'flex', alignItems: 'center', gap: '4px',
                     }}>
-                        ENTRY
+                        <span style={{ fontSize: '10px' }}>▶</span> START
                     </div>
                 )}
 
