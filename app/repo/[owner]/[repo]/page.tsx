@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Menu, X, MessageCircle, Shield, GitBranch,
-    FileText, Bot,
+    FileText, Bot, LayoutDashboard, Trophy, Share2, Terminal,
 } from 'lucide-react';
 
 import { FileExplorer } from '@/components/file-explorer';
@@ -15,6 +15,19 @@ import { RepoStatsCard } from '@/components/repo-dashboard/repo-stats-card';
 import { HealthScoreVisual } from '@/components/repo-dashboard/health-score-visual';
 import { ReadmePreview } from '@/components/repo-dashboard/readme-preview';
 import { FileViewer } from '@/components/repo-dashboard/file-viewer';
+import { ChallengeBoard } from '@/components/challenge-board';
+import { DependencyGraph } from '@/components/dependency-graph';
+import { ContributeSandbox } from '@/components/contribute-sandbox';
+import { DryRunPanel } from '@/components/dry-run-panel';
+
+type Tab = 'overview' | 'challenges' | 'map' | 'contribute';
+
+const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
+    { key: 'overview', label: 'Overview', icon: <LayoutDashboard size={14} /> },
+    { key: 'challenges', label: 'Challenges', icon: <Trophy size={14} /> },
+    { key: 'map', label: 'Codebase Map', icon: <Share2 size={14} /> },
+    { key: 'contribute', label: 'Contribute', icon: <Terminal size={14} /> },
+];
 
 export default function RepositoryDashboard({ params }: { params: { owner: string; repo: string } }) {
     const router = useRouter();
@@ -33,6 +46,12 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
     // File state
     const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
     const [activeFile, setActiveFile] = useState<string | null>(null);
+
+    // Tab state
+    const [activeTab, setActiveTab] = useState<Tab>('overview');
+    const [selectedChallenge, setSelectedChallenge] = useState<any>(null);
+    const [showDryRun, setShowDryRun] = useState(false);
+    const [dryRunChallenge, setDryRunChallenge] = useState<any>(null);
 
     // Responsive panel state
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -92,7 +111,19 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
     const handleFileClick = (filePath: string) => {
         setActiveFile(filePath);
+        setActiveTab('overview');
         setSidebarOpen(false);
+    };
+
+    const handleSelectChallenge = (challenge: any) => {
+        setSelectedChallenge(challenge);
+        setActiveTab('contribute');
+    };
+
+    const handleDryRun = (challenge: any) => {
+        setDryRunChallenge(challenge);
+        setShowDryRun(true);
+        setActiveTab('contribute');
     };
 
     return (
@@ -111,7 +142,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
                 {/* Repo name */}
                 <h1 className="text-sm font-medium truncate">
-                    <span className="text-slate-400">{owner}</span>
+                    <span className="text-slate-400 hover:text-blue-400 cursor-pointer transition-colors" onClick={() => router.push(`/user/${owner}`)}>{owner}</span>
                     <span className="text-slate-600 mx-1">/</span>
                     <span className="text-white">{repo}</span>
                 </h1>
@@ -133,6 +164,24 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                     <MessageCircle size={18} className="text-slate-400" />
                 </button>
             </header>
+
+            {/* ── Tab Bar ── */}
+            <div className="h-11 border-b border-white/5 bg-[#0B1120]/60 backdrop-blur-sm flex items-center px-4 gap-1 overflow-x-auto shrink-0 scrollbar-none">
+                {tabs.map(tab => (
+                    <button
+                        key={tab.key}
+                        onClick={() => { setActiveTab(tab.key); setActiveFile(null); }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                            activeTab === tab.key
+                                ? 'bg-white/10 text-white'
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                        }`}
+                    >
+                        {tab.icon}
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
 
             {/* ── Main 3-Panel Area ── */}
             <div className="flex-1 flex overflow-hidden">
@@ -189,53 +238,106 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                 {/* ── CENTER PANEL ── */}
                 <main className="flex-1 overflow-y-auto panel-scroll">
                     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-                        {/* Repo URL Input */}
-                        <RepoUrlInput currentOwner={owner} currentRepo={repo} onNavigate={handleRepoNavigate} />
 
-                        {activeFile ? (
-                            /* File Viewer */
-                            <FileViewer
-                                owner={owner}
-                                repo={repo}
-                                filePath={activeFile}
-                                branch={branch}
-                                onClose={() => setActiveFile(null)}
-                            />
-                        ) : (
+                        {/* ── OVERVIEW TAB ── */}
+                        {activeTab === 'overview' && (
                             <>
-                                {/* Project Summary */}
-                                <div className="glass-card rounded-2xl p-6">
-                                    <h2 className="text-xl font-bold mb-3 text-white">Project Summary</h2>
-                                    {overview ? (
-                                        <p className="text-slate-300 leading-relaxed">{overview}</p>
-                                    ) : (
-                                        <div className="space-y-3 animate-pulse">
-                                            <div className="h-4 bg-white/5 rounded w-full" />
-                                            <div className="h-4 bg-white/5 rounded w-5/6" />
-                                            <div className="h-4 bg-white/5 rounded w-4/6" />
+                                {/* Repo URL Input */}
+                                <RepoUrlInput currentOwner={owner} currentRepo={repo} onNavigate={handleRepoNavigate} />
+
+                                {activeFile ? (
+                                    <FileViewer
+                                        owner={owner}
+                                        repo={repo}
+                                        filePath={activeFile}
+                                        branch={branch}
+                                        onClose={() => setActiveFile(null)}
+                                    />
+                                ) : (
+                                    <>
+                                        {/* Project Summary */}
+                                        <div className="glass-card rounded-2xl p-6">
+                                            <h2 className="text-xl font-bold mb-3 text-white">Project Summary</h2>
+                                            {overview ? (
+                                                <p className="text-slate-300 leading-relaxed">{overview}</p>
+                                            ) : (
+                                                <div className="space-y-3 animate-pulse">
+                                                    <div className="h-4 bg-white/5 rounded w-full" />
+                                                    <div className="h-4 bg-white/5 rounded w-5/6" />
+                                                    <div className="h-4 bg-white/5 rounded w-4/6" />
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
 
-                                {/* Repo Stats */}
-                                <RepoStatsCard metadata={repoMetadata} />
+                                        {/* Repo Stats */}
+                                        <RepoStatsCard metadata={repoMetadata} />
 
-                                {/* Health Score */}
-                                <div className="glass-card rounded-2xl p-6">
-                                    <h3 className="text-lg font-semibold text-white mb-4">Repository Health</h3>
-                                    <HealthScoreVisual score={healthScore} metrics={healthMetrics} />
-                                </div>
+                                        {/* Health Score */}
+                                        <div className="glass-card rounded-2xl p-6">
+                                            <h3 className="text-lg font-semibold text-white mb-4">Repository Health</h3>
+                                            <HealthScoreVisual score={healthScore} metrics={healthMetrics} />
+                                        </div>
 
-                                {/* README */}
-                                <div className="glass-card rounded-2xl p-6">
-                                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                                        <FileText size={18} className="text-slate-400" />
-                                        README.md
-                                    </h3>
-                                    <ReadmePreview owner={owner} repo={repo} branch={branch} />
-                                </div>
+                                        {/* README */}
+                                        <div className="glass-card rounded-2xl p-6">
+                                            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                                                <FileText size={18} className="text-slate-400" />
+                                                README.md
+                                            </h3>
+                                            <ReadmePreview owner={owner} repo={repo} branch={branch} />
+                                        </div>
+                                    </>
+                                )}
                             </>
                         )}
+
+                        {/* ── CHALLENGES TAB ── */}
+                        {activeTab === 'challenges' && (
+                            <ChallengeBoard
+                                owner={owner}
+                                repo={repo}
+                                onSelectChallenge={handleSelectChallenge}
+                                onDryRun={handleDryRun}
+                            />
+                        )}
+
+                        {/* ── CODEBASE MAP TAB ── */}
+                        {activeTab === 'map' && (
+                            <DependencyGraph owner={owner} repo={repo} />
+                        )}
+
+                        {/* ── CONTRIBUTE TAB ── */}
+                        {activeTab === 'contribute' && (
+                            <div className="space-y-6">
+                                {showDryRun && dryRunChallenge ? (
+                                    <DryRunPanel
+                                        owner={owner}
+                                        repo={repo}
+                                        filePath={dryRunChallenge.filePath || ''}
+                                        originalContent={dryRunChallenge.originalContent || ''}
+                                        newContent={dryRunChallenge.newContent || ''}
+                                        challengeId={dryRunChallenge.id}
+                                        onContribute={() => {
+                                            setShowDryRun(false);
+                                            setDryRunChallenge(null);
+                                        }}
+                                    />
+                                ) : (
+                                    <ContributeSandbox
+                                        owner={owner}
+                                        repo={repo}
+                                        suggestion={selectedChallenge ? {
+                                            title: selectedChallenge.title || '',
+                                            description: selectedChallenge.description || '',
+                                            files: selectedChallenge.files || [],
+                                            steps: selectedChallenge.steps || [],
+                                        } : null}
+                                        challengeId={selectedChallenge?.id}
+                                    />
+                                )}
+                            </div>
+                        )}
+
                     </div>
                 </main>
 
