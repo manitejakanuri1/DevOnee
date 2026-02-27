@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Send, FileCode, Bot, User, AlertCircle, Lightbulb, Search, ThumbsUp, ThumbsDown, Copy, Check } from 'lucide-react';
+import { Send, FileCode, Bot, User, AlertCircle, Lightbulb, Search, ThumbsUp, ThumbsDown, Copy, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIInputWithSuggestions } from '@/components/ui/ai-input-with-suggestions';
 
@@ -17,10 +17,11 @@ interface ChatInterfaceProps {
     owner: string;
     repo: string;
     selectedFiles: string[];
+    onRemoveFile?: (file: string) => void;
     embedded?: boolean;
 }
 
-export function ChatInterface({ owner, repo, selectedFiles, embedded }: ChatInterfaceProps) {
+export function ChatInterface({ owner, repo, selectedFiles, onRemoveFile, embedded }: ChatInterfaceProps) {
     const [messages, setMessages] = useState<Message[]>([
         { id: '1', role: 'assistant', content: `Hi! I'm your DevOne mentor for ${repo}. How can I help you understand this codebase?` }
     ]);
@@ -197,13 +198,26 @@ export function ChatInterface({ owner, repo, selectedFiles, embedded }: ChatInte
                 )}
 
                 {selectedFiles.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                        {selectedFiles.map(file => (
-                            <span key={file} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-700 text-xs text-slate-300 border border-slate-600">
-                                <FileCode size={12} className="text-blue-400" />
-                                {file.split('/').pop()}
-                            </span>
-                        ))}
+                    <div className="mb-3">
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Context: {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {selectedFiles.map(file => (
+                                <span key={file} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500/10 text-xs text-blue-300 border border-blue-500/20">
+                                    <FileCode size={11} className="text-blue-400" />
+                                    {file.split('/').pop()}
+                                    {onRemoveFile && (
+                                        <button
+                                            onClick={() => onRemoveFile(file)}
+                                            className="ml-0.5 p-0.5 rounded hover:bg-blue-500/20 transition-colors"
+                                        >
+                                            <X size={10} className="text-blue-400" />
+                                        </button>
+                                    )}
+                                </span>
+                            ))}
+                        </div>
                     </div>
                 )}
 

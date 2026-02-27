@@ -201,16 +201,23 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ owner, repo })
         })
-            .then(res => res.json())
-            .then(data => {
+            .then(async res => {
+                const data = await res.json();
                 if (data.success && data.summary) {
                     setProjectSummary(data.summary);
                     setSummaryGeneratedAt(data.generatedAt || null);
                 } else if (data.error === 'NO_EMBEDDINGS' || data.error === 'NOT_INDEXED') {
                     setSummaryNeedsIndex(true);
+                } else if (data.error === 'LIMIT_EXCEEDED') {
+                    setSummaryError('Usage limit exceeded. Please try again later.');
+                } else if (!res.ok) {
+                    setSummaryError(data.message || 'Failed to load summary.');
                 }
             })
-            .catch(console.error)
+            .catch(err => {
+                console.error('Summary fetch error:', err);
+                setSummaryError('Failed to connect to summary service.');
+            })
             .finally(() => setSummaryLoading(false));
     }, [owner, repo]);
 
@@ -307,6 +314,10 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
         setChatOpen(true);
     }, []);
 
+    const handleRemoveFile = useCallback((file: string) => {
+        setSelectedFiles(prev => prev.filter(f => f !== file));
+    }, []);
+
     return (
         <div className="h-screen bg-[#0B1120] text-slate-50 flex flex-col overflow-hidden">
             {/* License warning popup for danger-level licenses */}
@@ -337,6 +348,12 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                 <div className="flex-1" />
 
                 {/* Badges */}
+                {selectedFiles.length > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-blue-300 bg-blue-500/10 px-2.5 py-1.5 rounded-full border border-blue-500/20">
+                        <FileText size={12} className="text-blue-400" />
+                        <span className="font-medium">{selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected</span>
+                    </div>
+                )}
                 <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 bg-white/5 px-2.5 py-1.5 rounded-full">
                     <Shield size={12} className="text-green-400" />
                     <span className="text-white font-medium">{healthScore !== null ? `${healthScore}/100` : '...'}</span>
@@ -644,7 +661,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
                 {/* ── RIGHT PANEL - Chat (Desktop) ── */}
                 <aside className="hidden lg:flex flex-col w-[400px] border-l border-white/5 bg-[#0B1120] shrink-0">
-                    <ChatInterface owner={owner} repo={repo} selectedFiles={selectedFiles} embedded />
+                    <ChatInterface owner={owner} repo={repo} selectedFiles={selectedFiles} onRemoveFile={handleRemoveFile} embedded />
                 </aside>
 
                 {/* ── Mobile Chat Panel ── */}
@@ -675,7 +692,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                                     </button>
                                 </div>
                                 <div className="flex-1 min-h-0">
-                                    <ChatInterface owner={owner} repo={repo} selectedFiles={selectedFiles} embedded />
+                                    <ChatInterface owner={owner} repo={repo} selectedFiles={selectedFiles} onRemoveFile={handleRemoveFile} embedded />
                                 </div>
                             </motion.div>
                         </>

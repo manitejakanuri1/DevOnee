@@ -1,6 +1,6 @@
 "use client";
 
-import { Shield, AlertTriangle, Ban, Scale, FileWarning, BookOpen } from 'lucide-react';
+import { Shield, AlertTriangle, Ban, Scale, FileWarning, BookOpen, CheckCircle2, XCircle } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
@@ -17,10 +17,14 @@ interface LicenseData {
     url: string | null;
     warningLevel: 'info' | 'warning' | 'danger';
     description: string;
+    plainLanguage?: string;
+    permissions?: string[];
+    limitations?: string[];
     obligations: string[];
     hasPatentClause: boolean;
     hasPatentsFile: boolean;
     hasNoticeFile?: boolean;
+    patentsFileContent?: string;
 }
 
 interface LicenseWarningDialogProps {
@@ -33,10 +37,12 @@ export function LicenseWarningDialog({ license, open, onClose }: LicenseWarningD
     if (!license || license.warningLevel === 'info') return null;
 
     const isDanger = license.warningLevel === 'danger';
+    const permissions = license.permissions || [];
+    const limitations = license.limitations || [];
 
     return (
         <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-            <DialogContent className={`border ${isDanger ? 'border-red-500/30' : 'border-yellow-500/30'} max-w-md`}>
+            <DialogContent className={`border ${isDanger ? 'border-red-500/30' : 'border-yellow-500/30'} max-w-lg`}>
                 <DialogHeader>
                     <div className="flex items-center gap-3 mb-2">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
@@ -58,28 +64,58 @@ export function LicenseWarningDialog({ license, open, onClose }: LicenseWarningD
                     </div>
                 </DialogHeader>
 
-                <div className="space-y-4">
-                    {/* Warning message */}
-                    <div className={`p-3 rounded-xl text-sm leading-relaxed ${
-                        isDanger
-                            ? 'bg-red-500/10 border border-red-500/20 text-red-200'
-                            : 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-200'
-                    }`}>
-                        {isDanger
-                            ? "This repository's license restricts how you can use, modify, or distribute the code. Do not copy or redistribute this project without explicit permission."
-                            : "This repository uses a copyleft license. Derivative works must be shared under the same or compatible license terms."
-                        }
-                    </div>
+                <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                    {/* Plain language summary */}
+                    {license.plainLanguage && (
+                        <div className={`p-3 rounded-xl text-sm leading-relaxed ${
+                            isDanger
+                                ? 'bg-red-500/10 border border-red-500/20 text-red-200'
+                                : 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-200'
+                        }`}>
+                            {license.plainLanguage}
+                        </div>
+                    )}
 
-                    {/* Description */}
-                    <p className="text-sm text-slate-300 leading-relaxed">
-                        {license.description}
-                    </p>
+                    {/* Permissions & Limitations */}
+                    {(permissions.length > 0 || limitations.length > 0) && (
+                        <div className="grid grid-cols-2 gap-3">
+                            {permissions.length > 0 && (
+                                <div>
+                                    <h5 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                        <CheckCircle2 size={11} /> Permissions
+                                    </h5>
+                                    <ul className="space-y-1">
+                                        {permissions.map((p, i) => (
+                                            <li key={i} className="flex items-start gap-1.5 text-xs text-slate-300">
+                                                <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500" />
+                                                {p}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            {limitations.length > 0 && (
+                                <div>
+                                    <h5 className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                        <XCircle size={11} /> Limitations
+                                    </h5>
+                                    <ul className="space-y-1">
+                                        {limitations.map((l, i) => (
+                                            <li key={i} className="flex items-start gap-1.5 text-xs text-slate-300">
+                                                <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-red-500" />
+                                                {l}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Obligations */}
                     {license.obligations.length > 0 && (
                         <div>
-                            <h5 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <h5 className="text-xs font-semibold text-yellow-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                                 <BookOpen size={11} /> Obligations
                             </h5>
                             <ul className="space-y-1.5">
@@ -112,6 +148,18 @@ export function LicenseWarningDialog({ license, open, onClose }: LicenseWarningD
                             )}
                         </div>
                     )}
+
+                    {/* PATENTS file content */}
+                    {license.patentsFileContent && (
+                        <div>
+                            <h5 className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <FileWarning size={11} /> Patents File
+                            </h5>
+                            <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/15 text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
+                                {license.patentsFileContent}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <DialogFooter>
@@ -139,7 +187,7 @@ export function LicenseBanner({ license, onDismiss }: { license: LicenseData | n
         <div className="mx-4 mt-2 flex items-center gap-3 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 text-sm">
             <AlertTriangle size={16} className="text-yellow-400 shrink-0" />
             <span className="flex-1">
-                <strong>{license.name}</strong> — Copyleft license. Derivative works must be shared under the same terms.
+                <strong>{license.name}</strong> — {license.plainLanguage || 'Copyleft license. Derivative works must be shared under the same terms.'}
             </span>
             {onDismiss && (
                 <button onClick={onDismiss} className="text-yellow-400 hover:text-yellow-300 text-xs font-medium shrink-0">

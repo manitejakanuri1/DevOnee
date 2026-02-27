@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Shield, AlertTriangle, Ban, Info, ChevronDown, ChevronRight,
-    ExternalLink, FileWarning, Scale, BookOpen
+    ExternalLink, FileWarning, Scale, BookOpen, CheckCircle2, XCircle
 } from 'lucide-react';
 
 interface LicenseData {
@@ -14,10 +14,14 @@ interface LicenseData {
     url: string | null;
     warningLevel: 'info' | 'warning' | 'danger';
     description: string;
+    plainLanguage?: string;
+    permissions?: string[];
+    limitations?: string[];
     obligations: string[];
     hasPatentClause: boolean;
     hasPatentsFile: boolean;
     hasNoticeFile?: boolean;
+    patentsFileContent?: string;
 }
 
 interface LicenseWarningProps {
@@ -107,6 +111,8 @@ export function LicenseWarning({ owner, repo }: LicenseWarningProps) {
 
     const config = levelConfig[license.warningLevel];
     const LevelIcon = config.icon;
+    const permissions = license.permissions || [];
+    const limitations = license.limitations || [];
 
     return (
         <motion.div
@@ -134,7 +140,9 @@ export function LicenseWarning({ owner, repo }: LicenseWarningProps) {
                             <span className="text-[10px] text-slate-500 font-mono">{license.spdxId}</span>
                         )}
                     </div>
-                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{license.description}</p>
+                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">
+                        {license.plainLanguage || license.description}
+                    </p>
                 </div>
                 <div className="shrink-0 text-slate-500">
                     {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -152,24 +160,63 @@ export function LicenseWarning({ owner, repo }: LicenseWarningProps) {
                         className="overflow-hidden"
                     >
                         <div className="p-4 space-y-4 border-t border-white/5">
-                            {/* Description */}
-                            <p className="text-sm text-slate-300 leading-relaxed">
-                                {license.description}
-                            </p>
+                            {/* Plain language summary */}
+                            {license.plainLanguage && (
+                                <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                                    <p className="text-sm text-slate-200 leading-relaxed italic">
+                                        &ldquo;{license.plainLanguage}&rdquo;
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Permissions & Limitations side by side */}
+                            {(permissions.length > 0 || limitations.length > 0) && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {/* Permissions */}
+                                    {permissions.length > 0 && (
+                                        <div>
+                                            <h5 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                <CheckCircle2 size={11} /> Permissions
+                                            </h5>
+                                            <ul className="space-y-1.5">
+                                                {permissions.map((p, i) => (
+                                                    <li key={i} className="flex items-start gap-2 text-xs text-slate-300">
+                                                        <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500" />
+                                                        {p}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                    {/* Limitations */}
+                                    {limitations.length > 0 && (
+                                        <div>
+                                            <h5 className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                <XCircle size={11} /> Limitations
+                                            </h5>
+                                            <ul className="space-y-1.5">
+                                                {limitations.map((l, i) => (
+                                                    <li key={i} className="flex items-start gap-2 text-xs text-slate-300">
+                                                        <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-red-500" />
+                                                        {l}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Obligations */}
                             {license.obligations.length > 0 && (
                                 <div>
-                                    <h5 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <h5 className="text-xs font-semibold text-yellow-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                                         <BookOpen size={11} /> Obligations
                                     </h5>
                                     <ul className="space-y-1.5">
                                         {license.obligations.map((ob, i) => (
                                             <li key={i} className="flex items-start gap-2 text-xs text-slate-300">
-                                                <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${
-                                                    license.warningLevel === 'info' ? 'bg-emerald-500' :
-                                                    license.warningLevel === 'warning' ? 'bg-yellow-500' : 'bg-red-500'
-                                                }`} />
+                                                <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0 bg-yellow-500" />
                                                 {ob}
                                             </li>
                                         ))}
@@ -188,7 +235,7 @@ export function LicenseWarning({ owner, repo }: LicenseWarningProps) {
                                 {license.hasPatentsFile && (
                                     <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-300">
                                         <FileWarning size={11} />
-                                        PATENTS file detected — review before contributing
+                                        PATENTS file detected
                                     </div>
                                 )}
                                 {license.hasNoticeFile && (
@@ -198,6 +245,18 @@ export function LicenseWarning({ owner, repo }: LicenseWarningProps) {
                                     </div>
                                 )}
                             </div>
+
+                            {/* PATENTS file content preview */}
+                            {license.patentsFileContent && (
+                                <div>
+                                    <h5 className="text-xs font-semibold text-orange-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                        <FileWarning size={11} /> Patents File Content
+                                    </h5>
+                                    <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/15 text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+                                        {license.patentsFileContent}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Link to full license */}
                             {license.url && (

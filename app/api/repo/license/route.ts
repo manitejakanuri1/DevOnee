@@ -51,8 +51,9 @@ export async function POST(req: NextRequest) {
             // License endpoint may fail, continue
         }
 
-        // Check for PATENTS file
+        // Check for PATENTS file and fetch its content
         let hasPatentsFile = false;
+        let patentsFileContent: string | undefined;
         const patentFiles = ['PATENTS', 'PATENTS.md', 'PATENTS.txt'];
 
         for (const pFile of patentFiles) {
@@ -63,6 +64,15 @@ export async function POST(req: NextRequest) {
                 );
                 if (patentRes.ok) {
                     hasPatentsFile = true;
+                    try {
+                        const patentData = await patentRes.json();
+                        if (patentData.content && patentData.encoding === 'base64') {
+                            const decoded = Buffer.from(patentData.content, 'base64').toString('utf-8');
+                            patentsFileContent = decoded.substring(0, 1000);
+                        }
+                    } catch {
+                        // Content decode failed, just mark as detected
+                    }
                     break;
                 }
             } catch {
@@ -83,7 +93,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Categorize
-        const licenseInfo = categorizeLicense(licenseKey, licenseName, spdxId, licenseUrl, hasPatentsFile);
+        const licenseInfo = categorizeLicense(licenseKey, licenseName, spdxId, licenseUrl, hasPatentsFile, patentsFileContent);
 
         const result = {
             ...licenseInfo,

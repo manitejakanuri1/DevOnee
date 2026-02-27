@@ -59,8 +59,12 @@ export async function generateProjectSummary(
     repoId: string,
     repoName: string
 ): Promise<string> {
+    if (!process.env.GEMINI_API_KEY) {
+        throw new Error("GEMINI_API_KEY is not configured. Cannot generate summary.");
+    }
+
     const supabase = createAdminClient();
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     // Fetch all embeddings for this repo
