@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Terminal, Send, CheckCircle2, AlertTriangle, Loader2, GitPullRequest, GitFork, GitBranch, FileCode, ExternalLink, Trophy } from 'lucide-react';
+import { Terminal, Send, CheckCircle2, AlertTriangle, Loader2, GitPullRequest, GitFork, GitBranch, FileCode, ExternalLink, Trophy, FlaskConical } from 'lucide-react';
 import { GithubDiff, DiffLine } from '@/components/ui/github-inline-diff';
 import { useSession, signIn } from 'next-auth/react';
+import { TestSandbox } from '@/components/sandbox/test-sandbox';
 
 interface ContributeSandboxProps {
     owner: string;
@@ -23,7 +24,7 @@ const PR_STEPS = [
 
 export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCreated }: ContributeSandboxProps) {
     const { data: session } = useSession();
-    const [activeTab, setActiveTab] = useState<'editor' | 'review'>('editor');
+    const [activeTab, setActiveTab] = useState<'editor' | 'tests' | 'review'>('editor');
 
     // Editor state
     const [editorContent, setEditorContent] = useState(
@@ -143,6 +144,13 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
                         Editor
                     </button>
                     <button
+                        onClick={() => setActiveTab('tests')}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'tests' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
+                    >
+                        <FlaskConical size={14} />
+                        Tests
+                    </button>
+                    <button
                         onClick={() => setActiveTab('review')}
                         className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'review' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
                     >
@@ -160,6 +168,13 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
                         className="w-full h-full min-h-[350px] bg-transparent text-slate-300 font-mono p-4 focus:outline-none resize-y"
                         spellCheck={false}
                     />
+                ) : activeTab === 'tests' ? (
+                    <div className="min-h-[350px]">
+                        <TestSandbox
+                            fileContent={editorContent}
+                            fileName={suggestion?.files?.[0] || 'source.ts'}
+                        />
+                    </div>
                 ) : (
                     <div className="p-6 h-full flex flex-col h-[350px] overflow-y-auto bg-slate-900">
                         {reviewLoading ? (
@@ -335,19 +350,21 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
             </div>
 
             {/* Footer */}
-            {activeTab === 'editor' && (
+            {(activeTab === 'editor' || activeTab === 'tests') && (
                 <div className="bg-slate-900 p-4 flex justify-between items-center">
                     <div className="text-sm text-slate-400 flex items-center gap-2">
                         <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        Ready to submit
+                        {activeTab === 'tests' ? 'Write and run tests against your code' : 'Ready to submit'}
                     </div>
-                    <button
-                        onClick={handleReview}
-                        disabled={reviewLoading}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-                    >
-                        Submit to Sandbox Review <Send size={16} />
-                    </button>
+                    {activeTab === 'editor' && (
+                        <button
+                            onClick={handleReview}
+                            disabled={reviewLoading}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                        >
+                            Submit to Sandbox Review <Send size={16} />
+                        </button>
+                    )}
                 </div>
             )}
         </div>

@@ -19,6 +19,7 @@ import { ChallengeBoard } from '@/components/challenge-board';
 import { DependencyGraph } from '@/components/dependency-graph';
 import { ContributeSandbox } from '@/components/contribute-sandbox';
 import { DryRunPanel } from '@/components/dry-run-panel';
+import { LicenseWarning } from '@/components/repo-dashboard/license-warning';
 
 type Tab = 'overview' | 'challenges' | 'map' | 'contribute';
 
@@ -244,6 +245,9 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                             <>
                                 {/* Repo URL Input */}
                                 <RepoUrlInput currentOwner={owner} currentRepo={repo} onNavigate={handleRepoNavigate} />
+
+                                {/* License Warning */}
+                                <LicenseWarning owner={owner} repo={repo} />
 
                                 {activeFile ? (
                                     <FileViewer
