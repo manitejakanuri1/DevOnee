@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
             .from('repositories')
             .select('id, summary')
             .eq('name', repoFullName)
-            .single();
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
         if (lookupError || !repository) {
             return NextResponse.json({ error: "Repository not found or not indexed yet." }, { status: 404 });

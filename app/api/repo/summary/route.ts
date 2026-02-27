@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
             .from("repositories")
             .select("id, project_summary, summary_generated_at")
             .eq("name", repoFullName)
+            .order("created_at", { ascending: false })
+            .limit(1)
             .maybeSingle();
 
         if (lookupError) {
