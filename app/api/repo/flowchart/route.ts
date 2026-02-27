@@ -49,6 +49,68 @@ function getNodeType(filePath: string): { type: string; color: string } {
     return { type: 'source', color: '#e2e8f0' };
 }
 
+// ── Generate a short purpose description for a file ──
+function getFilePurpose(filePath: string, fileType: string, outCount: number, inCount: number): string {
+    const lower = filePath.toLowerCase();
+    const name = path.posix.basename(lower);
+    const nameNoExt = name.replace(/\.[^.]+$/, '');
+    const dir = path.posix.dirname(lower);
+
+    // Specific well-known files
+    if (nameNoExt === 'index' && dir === '.') return 'Root entry — bootstraps the application';
+    if (nameNoExt === 'index' || nameNoExt === 'main') return 'Entry point — initializes and starts this module';
+    if (nameNoExt === 'app' || nameNoExt === 'application') return 'Root component — defines the main app structure and routing';
+    if (name.startsWith('page.')) return 'Page route — renders a navigable page in the app';
+    if (name.startsWith('layout.')) return 'Layout wrapper — provides shared UI structure for child pages';
+    if (name === 'server.ts' || name === 'server.js') return 'Server — starts and configures the HTTP server';
+    if (name.startsWith('middleware.')) return 'Middleware — intercepts requests for auth, logging, or redirects';
+    if (name === 'package.json') return 'Project manifest — defines dependencies and scripts';
+    if (name === 'tsconfig.json') return 'TypeScript config — sets compiler options and paths';
+    if (name.includes('.config.') || name.endsWith('.config.ts') || name.endsWith('.config.js')) return 'Configuration — project build or tool settings';
+    if (name === 'readme.md') return 'Documentation — project overview and setup instructions';
+    if (name === '.env' || name.startsWith('.env.')) return 'Environment vars — stores secrets and config values';
+    if (name === 'globals.css' || name === 'global.css') return 'Global styles — base CSS applied across the entire app';
+    if (name.includes('reportwebvitals')) return 'Performance monitor — tracks Core Web Vitals metrics';
+    if (name.includes('setuptest') || name.includes('setup.test')) return 'Test setup — configures the testing environment';
+
+    // Type-based descriptions
+    switch (fileType) {
+        case 'test':
+            return `Test suite — validates ${nameNoExt.replace(/\.test|\.spec/g, '')} works correctly`;
+        case 'api':
+            if (lower.includes('/controllers/')) return `Controller — handles HTTP request logic for ${nameNoExt}`;
+            if (lower.includes('/routes/')) return `Route definition — maps URL paths to handlers`;
+            if (lower.includes('/handlers/')) return `Request handler — processes incoming API calls`;
+            return `API endpoint — serves data to the frontend`;
+        case 'component':
+            if (lower.includes('/ui/')) return `UI primitive — reusable interface element (${nameNoExt})`;
+            return `Component — renders the ${nameNoExt} section of the UI`;
+        case 'util':
+            if (lower.includes('/hooks/') || nameNoExt.startsWith('use')) return `Custom hook — encapsulates reusable ${nameNoExt.replace(/^use/i, '')} logic`;
+            if (lower.includes('/helpers/')) return `Helper — provides ${nameNoExt} utility functions`;
+            return `Utility — shared ${nameNoExt} logic used across modules`;
+        case 'model':
+            if (lower.includes('/types/') || lower.includes('/interfaces/')) return `Type definitions — TypeScript types for ${nameNoExt}`;
+            if (lower.includes('/schemas/')) return `Schema — defines the data structure for ${nameNoExt}`;
+            return `Data model — defines the ${nameNoExt} entity structure`;
+        case 'service':
+            if (lower.includes('/providers/')) return `Provider — supplies ${nameNoExt} context or data`;
+            return `Service — handles ${nameNoExt} business logic and data access`;
+        case 'config':
+            return `Config file — settings for ${nameNoExt}`;
+        case 'docs':
+            return `Documentation — describes ${nameNoExt}`;
+        case 'entry':
+            if (inCount > outCount) return `Entry point — imported by ${inCount} files, central module`;
+            return `Entry point — initializes and exports this module`;
+        default:
+            if (outCount === 0 && inCount > 0) return `Leaf module — imported by ${inCount} file${inCount > 1 ? 's' : ''}, no dependencies`;
+            if (inCount === 0 && outCount > 0) return `Root module — imports ${outCount} file${outCount > 1 ? 's' : ''}, not imported elsewhere`;
+            if (outCount > 0 && inCount > 0) return `Source module — connects ${outCount} imports with ${inCount} dependents`;
+            return `Source file — part of the project codebase`;
+    }
+}
+
 // ── Supported source code extensions ──
 const ANALYZABLE_EXTS = new Set([
     '.ts', '.tsx', '.js', '.jsx', '.mjs',
@@ -808,6 +870,7 @@ export async function POST(req: NextRequest) {
                         imports: outCount,
                         importedBy: inCount,
                         lines,
+                        purpose: getFilePurpose(filePath, fileType, outCount, inCount),
                     },
                     position: { x: 0, y: 0 },
                 };

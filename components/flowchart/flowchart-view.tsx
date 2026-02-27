@@ -15,7 +15,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY, type SimulationNodeDatum, type SimulationLinkDatum } from 'd3-force';
-import { Loader2, AlertCircle, Network, X } from 'lucide-react';
+import { Loader2, AlertCircle, Network, X, ExternalLink } from 'lucide-react';
 import { CustomFileNode, FolderGroupNode } from './custom-node';
 
 interface FlowchartViewProps {
@@ -315,6 +315,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
             label: d?.label || '?',
             fullPath: d?.fullPath || '',
             color: d?.color || '#60a5fa',
+            purpose: d?.purpose || '',
             imports,
             usedBy,
             isEntry: entryPointIds.has(selectedNodeId),
@@ -570,10 +571,19 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                         <X size={10} />
                     </button>
 
-                    {/* Selected */}
-                    <div>
+                    {/* Selected + Purpose */}
+                    <div style={{ maxWidth: '180px' }}>
                         <div style={{ fontSize: '10px', color: '#666', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Selected</div>
                         <div style={{ fontSize: '13px', fontWeight: 600, color: selectedInfo.color }}>{selectedInfo.label}</div>
+                        {selectedInfo.purpose && (
+                            <div style={{
+                                fontSize: '9.5px', color: '#777', marginTop: '3px',
+                                lineHeight: '1.3',
+                                fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                            }}>
+                                {selectedInfo.purpose}
+                            </div>
+                        )}
                     </div>
 
                     <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.08)' }} />
@@ -596,7 +606,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                         <div style={{ fontSize: '10px', color: '#666', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Imports</div>
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' as const, marginTop: '3px' }}>
                             {selectedInfo.imports.length === 0
-                                ? <span style={{ color: '#555', fontSize: '10px' }}>none (leaf)</span>
+                                ? <span style={{ color: '#555', fontSize: '10px' }}>—</span>
                                 : selectedInfo.imports.slice(0, 5).map((n, i) => (
                                     <span key={i} style={{
                                         background: 'rgba(99,102,241,0.12)',
@@ -618,7 +628,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                         <div style={{ fontSize: '10px', color: '#666', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Used By</div>
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' as const, marginTop: '3px' }}>
                             {selectedInfo.usedBy.length === 0
-                                ? <span style={{ color: '#555', fontSize: '10px' }}>none (root)</span>
+                                ? <span style={{ color: '#555', fontSize: '10px' }}>—</span>
                                 : selectedInfo.usedBy.slice(0, 5).map((n, i) => (
                                     <span key={i} style={{
                                         background: 'rgba(16,185,129,0.12)',
@@ -633,19 +643,43 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                         </div>
                     </div>
 
+                    <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.08)' }} />
+
+                    {/* Open File button */}
+                    <a
+                        href={`/repo/${owner}/${repo}/blob/${selectedInfo.fullPath}`}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            padding: '6px 12px', borderRadius: '8px',
+                            background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.25)',
+                            color: '#a5b4fc', fontSize: '10px', fontWeight: 600,
+                            textDecoration: 'none', cursor: 'pointer',
+                            letterSpacing: '0.3px', whiteSpace: 'nowrap' as const,
+                            transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(99,102,241,0.25)';
+                            e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(99,102,241,0.15)';
+                            e.currentTarget.style.borderColor = 'rgba(99,102,241,0.25)';
+                        }}
+                    >
+                        <ExternalLink size={11} />
+                        Open File
+                    </a>
+
                     {/* Entry badge */}
                     {selectedInfo.isEntry && (
-                        <>
-                            <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.08)' }} />
-                            <div style={{
-                                display: 'flex', alignItems: 'center', gap: '6px',
-                                padding: '4px 10px', borderRadius: '8px',
-                                background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)',
-                            }}>
-                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#818cf8' }} />
-                                <span style={{ fontSize: '10px', fontWeight: 700, color: '#a5b4fc', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Entry Point</span>
-                            </div>
-                        </>
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            padding: '4px 10px', borderRadius: '8px',
+                            background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)',
+                        }}>
+                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#818cf8' }} />
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: '#a5b4fc', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>Entry Point</span>
+                        </div>
                     )}
                 </div>
             )}
