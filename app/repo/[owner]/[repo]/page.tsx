@@ -110,6 +110,9 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
     const [projectSummary, setProjectSummary] = useState<string | null>(null);
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [summaryGeneratedAt, setSummaryGeneratedAt] = useState<string | null>(null);
+    const [summaryError, setSummaryError] = useState<string | null>(null);
+    const [summaryNeedsIndex, setSummaryNeedsIndex] = useState(false);
+    const [indexingInProgress, setIndexingInProgress] = useState(false);
 
     // Responsive panel state
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -129,6 +132,9 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
         setProjectSummary(null);
         setSummaryGeneratedAt(null);
         setSummaryLoading(false);
+        setSummaryError(null);
+        setSummaryNeedsIndex(false);
+        setIndexingInProgress(false);
 
         // Fetch overview
         fetch('/api/repo/overview', {
@@ -188,6 +194,8 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
         // Fetch comprehensive summary (auto-generate if not cached)
         setSummaryLoading(true);
+        setSummaryError(null);
+        setSummaryNeedsIndex(false);
         fetch('/api/repo/summary', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -195,17 +203,61 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
         })
             .then(res => res.json())
             .then(data => {
-                if (data.success) {
+                if (data.success && data.summary) {
                     setProjectSummary(data.summary);
                     setSummaryGeneratedAt(data.generatedAt || null);
+                } else if (data.error === 'NO_EMBEDDINGS' || data.error === 'NOT_INDEXED') {
+                    setSummaryNeedsIndex(true);
                 }
             })
             .catch(console.error)
             .finally(() => setSummaryLoading(false));
     }, [owner, repo]);
 
+    const handleIndexAndSummarize = async () => {
+        setIndexingInProgress(true);
+        setSummaryError(null);
+        setSummaryNeedsIndex(false);
+        try {
+            // Step 1: Index the repository
+            const indexRes = await fetch('/api/repo/index', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ owner, repo })
+            });
+            const indexData = await indexRes.json();
+            if (!indexRes.ok || indexData.error) {
+                setSummaryError(indexData.message || 'Failed to index repository.');
+                setIndexingInProgress(false);
+                return;
+            }
+
+            // Step 2: Now generate the summary
+            setIndexingInProgress(false);
+            setSummaryLoading(true);
+            const sumRes = await fetch('/api/repo/summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ owner, repo, force: true })
+            });
+            const sumData = await sumRes.json();
+            if (sumData.success && sumData.summary) {
+                setProjectSummary(sumData.summary);
+                setSummaryGeneratedAt(sumData.generatedAt || null);
+            } else {
+                setSummaryError(sumData.message || 'Failed to generate summary.');
+            }
+        } catch (err: any) {
+            setSummaryError(err.message || 'Something went wrong.');
+        } finally {
+            setIndexingInProgress(false);
+            setSummaryLoading(false);
+        }
+    };
+
     const handleRegenerateSummary = async () => {
         setSummaryLoading(true);
+        setSummaryError(null);
         try {
             const res = await fetch('/api/repo/summary', {
                 method: 'POST',
@@ -213,12 +265,16 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                 body: JSON.stringify({ owner, repo, force: true })
             });
             const data = await res.json();
-            if (data.success) {
+            if (data.success && data.summary) {
                 setProjectSummary(data.summary);
                 setSummaryGeneratedAt(data.generatedAt || null);
+            } else if (data.error === 'NO_EMBEDDINGS' || data.error === 'NOT_INDEXED') {
+                setSummaryNeedsIndex(true);
+            } else {
+                setSummaryError(data.message || 'Failed to generate summary.');
             }
-        } catch (err) {
-            console.error(err);
+        } catch (err: any) {
+            setSummaryError(err.message || 'Something went wrong.');
         } finally {
             setSummaryLoading(false);
         }
@@ -424,25 +480,48 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                                                             {new Date(summaryGeneratedAt).toLocaleDateString()}
                                                         </span>
                                                     )}
-                                                    <button
-                                                        onClick={handleRegenerateSummary}
-                                                        disabled={summaryLoading}
-                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 hover:border-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        {summaryLoading ? (
-                                                            <Loader2 size={12} className="animate-spin" />
-                                                        ) : (
-                                                            <RefreshCw size={12} />
-                                                        )}
-                                                        {summaryLoading ? 'Analyzing...' : 'Regenerate'}
-                                                    </button>
+                                                    {projectSummary && (
+                                                        <button
+                                                            onClick={handleRegenerateSummary}
+                                                            disabled={summaryLoading || indexingInProgress}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/5 hover:border-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        >
+                                                            {summaryLoading ? (
+                                                                <Loader2 size={12} className="animate-spin" />
+                                                            ) : (
+                                                                <RefreshCw size={12} />
+                                                            )}
+                                                            {summaryLoading ? 'Analyzing...' : 'Regenerate'}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
-                                            {summaryLoading && !projectSummary ? (
+
+                                            {/* Error state */}
+                                            {summaryError && (
+                                                <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+                                                    {summaryError}
+                                                </div>
+                                            )}
+
+                                            {/* Indexing in progress */}
+                                            {indexingInProgress ? (
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center gap-3 text-sm text-slate-400">
+                                                        <Loader2 size={16} className="animate-spin text-purple-400" />
+                                                        Indexing repository files... This may take a minute.
+                                                    </div>
+                                                    <div className="space-y-3 animate-pulse">
+                                                        <div className="h-4 bg-purple-500/10 rounded w-full" />
+                                                        <div className="h-4 bg-purple-500/10 rounded w-5/6" />
+                                                        <div className="h-4 bg-purple-500/10 rounded w-4/6" />
+                                                    </div>
+                                                </div>
+                                            ) : summaryLoading && !projectSummary ? (
                                                 <div className="space-y-4">
                                                     <div className="flex items-center gap-3 text-sm text-slate-400">
                                                         <Loader2 size={16} className="animate-spin text-blue-400" />
-                                                        Analyzing all indexed files with AI...
+                                                        Analyzing all indexed files with AI... This may take a moment.
                                                     </div>
                                                     <div className="space-y-3 animate-pulse">
                                                         <div className="h-4 bg-white/5 rounded w-full" />
@@ -456,10 +535,33 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                                                 <div className="prose prose-invert prose-sm max-w-none text-slate-300 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-white [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-slate-200 [&_ul]:space-y-1 [&_li]:text-slate-300 [&_strong]:text-slate-200 [&_code]:text-blue-300 [&_code]:bg-blue-500/10 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_hr]:border-white/5 [&_hr]:my-4">
                                                     <ReactMarkdown>{projectSummary}</ReactMarkdown>
                                                 </div>
+                                            ) : summaryNeedsIndex ? (
+                                                <div className="text-center py-6 space-y-3">
+                                                    <p className="text-sm text-slate-400">
+                                                        This repository needs to be indexed before generating a summary.
+                                                    </p>
+                                                    <button
+                                                        onClick={handleIndexAndSummarize}
+                                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-all"
+                                                    >
+                                                        <BookOpen size={14} />
+                                                        Index &amp; Generate Summary
+                                                    </button>
+                                                </div>
                                             ) : (
-                                                <p className="text-sm text-slate-500">
-                                                    No comprehensive summary available. Click Regenerate to analyze all files.
-                                                </p>
+                                                <div className="text-center py-6 space-y-3">
+                                                    <p className="text-sm text-slate-400">
+                                                        Generate a comprehensive AI analysis of this repository.
+                                                    </p>
+                                                    <button
+                                                        onClick={handleRegenerateSummary}
+                                                        disabled={summaryLoading}
+                                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-all disabled:opacity-50"
+                                                    >
+                                                        <BookOpen size={14} />
+                                                        Generate Summary
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
 
