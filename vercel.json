@@ -1,11 +1,10 @@
 {
     "version": 2,
     "framework": "nextjs",
-    "buildCommand": "pnpm build",
-    "installCommand": "pnpm install",
+    "buildCommand": "npm run build",
+    "installCommand": "npm install",
     "regions": [
-        "iad1",
-        "sfo1"
+        "iad1"
     ],
     "env": {
         "NODE_VERSION": "20.x"
