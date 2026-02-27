@@ -22,6 +22,7 @@ import { buildBlobUrl } from '@/lib/path-utils';
 interface FlowchartViewProps {
     owner: string;
     repo: string;
+    branch: string;
 }
 
 interface FlowchartStats {
@@ -66,7 +67,7 @@ function applyDagreLayout(
     return { nodes: layoutNodes, edges: rawEdges };
 }
 
-export function FlowchartView({ owner, repo }: FlowchartViewProps) {
+export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
     const router = useRouter();
     const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
@@ -112,10 +113,10 @@ export function FlowchartView({ owner, repo }: FlowchartViewProps) {
         (_event: React.MouseEvent, node: Node) => {
             const fullPath = (node.data as any)?.fullPath;
             if (fullPath) {
-                router.push(buildBlobUrl(owner, repo, fullPath));
+                router.push(buildBlobUrl(owner, repo, fullPath, branch));
             }
         },
-        [owner, repo, router]
+        [owner, repo, branch, router]
     );
 
     // Edge hover handlers

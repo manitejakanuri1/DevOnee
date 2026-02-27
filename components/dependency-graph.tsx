@@ -9,6 +9,7 @@ import { buildBlobUrl } from "@/lib/path-utils";
 interface DependencyGraphProps {
     owner: string;
     repo: string;
+    branch?: string;
 }
 
 interface LegendItem {
@@ -16,7 +17,7 @@ interface LegendItem {
     color: string;
 }
 
-export function DependencyGraph({ owner, repo }: DependencyGraphProps) {
+export function DependencyGraph({ owner, repo, branch }: DependencyGraphProps) {
     const [graphData, setGraphData] = useState<{ nodes: any[]; links: any[] } | null>(null);
     const [legend, setLegend] = useState<LegendItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -238,7 +239,7 @@ export function DependencyGraph({ owner, repo }: DependencyGraphProps) {
                         </div>
 
                         <a
-                            href={buildBlobUrl(owner, repo, selectedNode.id)}
+                            href={buildBlobUrl(owner, repo, selectedNode.id, branch)}
                             className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 mt-2"
                         >
                             View File <ExternalLink size={12} />

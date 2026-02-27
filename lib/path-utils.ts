@@ -98,11 +98,14 @@ export function safePathJoin(...segments: string[]): string {
 /**
  * Build a safe blob viewer URL for navigating to a file.
  * Ensures the filePath is normalized and deduplicated before embedding in the URL.
+ * Optionally includes the branch as a query parameter so the blob page uses the correct ref.
  */
-export function buildBlobUrl(owner: string, repo: string, filePath: string): string {
+export function buildBlobUrl(owner: string, repo: string, filePath: string, branch?: string): string {
     const clean = safePath(filePath);
     if (!clean) return `/repo/${owner}/${repo}`;
-    return `/repo/${owner}/${repo}/blob/${clean}`;
+    const base = `/repo/${owner}/${repo}/blob/${clean}`;
+    if (branch) return `${base}?ref=${encodeURIComponent(branch)}`;
+    return base;
 }
 
 /**

@@ -1,26 +1,58 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ArrowLeft, Loader2, FileCode2 } from 'lucide-react';
+import { ArrowLeft, Loader2, FileCode2, GitBranch } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { safePathFromSegments } from '@/lib/path-utils';
 
 export default function BlobViewer({ params }: { params: { owner: string, repo: string, path: string[] } }) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const filePath = safePathFromSegments(params.path);
 
     const [content, setContent] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [branch, setBranch] = useState<string | null>(null);
 
+    // Step 1: Resolve the correct branch
     useEffect(() => {
+        // Check if branch was passed as query param
+        const refParam = searchParams.get('ref');
+        if (refParam) {
+            setBranch(refParam);
+            return;
+        }
+
+        // Otherwise, fetch the repo's default branch from GitHub API
+        fetch(`https://api.github.com/repos/${params.owner}/${params.repo}`, {
+            headers: { 'Accept': 'application/vnd.github.v3+json' }
+        })
+            .then(res => res.json())
+            .then(data => {
+                setBranch(data.default_branch || 'main');
+            })
+            .catch(() => {
+                // Fallback to 'main' if metadata fetch fails
+                setBranch('main');
+            });
+    }, [params.owner, params.repo, searchParams]);
+
+    // Step 2: Fetch file content once branch is resolved
+    useEffect(() => {
+        if (!branch || !filePath) return;
+
+        setLoading(true);
+        setError(null);
+        setContent(null);
+
         fetch('/api/github/content', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ owner: params.owner, repo: params.repo, path: filePath, ref: 'main' })
+            body: JSON.stringify({ owner: params.owner, repo: params.repo, path: filePath, ref: branch })
         })
             .then(res => res.json())
             .then(data => {
@@ -29,7 +61,7 @@ export default function BlobViewer({ params }: { params: { owner: string, repo: 
             })
             .catch(err => setError(err.message))
             .finally(() => setLoading(false));
-    }, [params.owner, params.repo, filePath]);
+    }, [params.owner, params.repo, filePath, branch]);
 
     const fileExtension = filePath.split('.').pop() || 'typescript';
     let language = fileExtension;
@@ -54,6 +86,12 @@ export default function BlobViewer({ params }: { params: { owner: string, repo: 
                             <span className="text-slate-200">{filePath}</span>
                         </h1>
                     </div>
+                    {branch && (
+                        <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 bg-slate-800/50 px-2.5 py-1.5 rounded-full border border-slate-700">
+                            <GitBranch size={12} className="text-blue-400" />
+                            <span className="text-white font-medium">{branch}</span>
+                        </div>
+                    )}
                 </div>
             </header>
 
@@ -67,7 +105,7 @@ export default function BlobViewer({ params }: { params: { owner: string, repo: 
                     {loading && (
                         <div className="p-20 flex flex-col items-center justify-center text-slate-500">
                             <Loader2 className="animate-spin mb-4" size={32} />
-                            <p>Fetching blob from GitHub...</p>
+                            <p>{!branch ? 'Detecting branch...' : 'Fetching blob from GitHub...'}</p>
                         </div>
                     )}
 

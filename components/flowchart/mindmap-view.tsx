@@ -21,6 +21,7 @@ import { buildBlobUrl, safePath } from '@/lib/path-utils';
 interface MindmapViewProps {
     owner: string;
     repo: string;
+    branch: string;
 }
 
 interface TreeNode {
@@ -222,7 +223,7 @@ function computeRadialLayout(
     return { nodes, edges };
 }
 
-export function MindmapView({ owner, repo }: MindmapViewProps) {
+export function MindmapView({ owner, repo, branch }: MindmapViewProps) {
     const router = useRouter();
     const [nodes, setNodes, onNodesChange] = useNodesState([] as Node[]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([] as Edge[]);
@@ -289,7 +290,7 @@ export function MindmapView({ owner, repo }: MindmapViewProps) {
                     return next;
                 });
             } else if (!data.isFolder && data.fullPath) {
-                router.push(buildBlobUrl(owner, repo, data.fullPath));
+                router.push(buildBlobUrl(owner, repo, data.fullPath, branch));
             }
         },
         [owner, repo, router]

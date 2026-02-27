@@ -33,7 +33,7 @@ const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 // ── Codebase Map sub-tab with Flowchart/Mindmap toggle ──
-function CodebaseMapTab({ owner, repo }: { owner: string; repo: string }) {
+function CodebaseMapTab({ owner, repo, branch }: { owner: string; repo: string; branch: string }) {
     const [mapView, setMapView] = useState<'mindmap' | 'flowchart'>('mindmap');
 
     return (
@@ -64,9 +64,9 @@ function CodebaseMapTab({ owner, repo }: { owner: string; repo: string }) {
 
             {/* View */}
             {mapView === 'mindmap' ? (
-                <MindmapView owner={owner} repo={repo} />
+                <MindmapView owner={owner} repo={repo} branch={branch} />
             ) : (
-                <FlowchartView owner={owner} repo={repo} />
+                <FlowchartView owner={owner} repo={repo} branch={branch} />
             )}
         </div>
     );
@@ -349,7 +349,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
                         {/* ── CODEBASE MAP TAB ── */}
                         {activeTab === 'map' && (
-                            <CodebaseMapTab owner={owner} repo={repo} />
+                            <CodebaseMapTab owner={owner} repo={repo} branch={branch} />
                         )}
 
                         {/* ── CONTRIBUTE TAB ── */}
