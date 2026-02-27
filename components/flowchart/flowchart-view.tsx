@@ -14,7 +14,7 @@ import {
     type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import Dagre from '@dagrejs/dagre';
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY, type SimulationNodeDatum, type SimulationLinkDatum } from 'd3-force';
 import { Loader2, AlertCircle, Network, X } from 'lucide-react';
 import { CustomFileNode, FolderGroupNode } from './custom-node';
 
@@ -54,25 +54,59 @@ const LEGEND: { label: string; color: string }[] = [
 /* ── Register node types (outside component) ── */
 const nodeTypes = { custom: CustomFileNode, folder: FolderGroupNode };
 
-/* ── Dagre layout ── */
-function applyDagreLayout(
+/* ── Force-directed layout (organic / scattered) ── */
+interface SimNode extends SimulationNodeDatum {
+    id: string;
+    _original: Node;
+}
+
+function applyForceLayout(
     rawNodes: Node[],
     rawEdges: Edge[],
-    direction: 'TB' | 'LR' = 'TB'
 ): { nodes: Node[]; edges: Edge[] } {
-    const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-    g.setGraph({ rankdir: direction, nodesep: 100, ranksep: 140, edgesep: 40 });
+    const NODE_W = 220;
+    const NODE_H = 95;
 
-    rawNodes.forEach(n => g.setNode(n.id, { width: 220, height: 95 }));
-    rawEdges.forEach(e => g.setEdge(e.source, e.target));
+    // Build simulation nodes
+    const simNodes: SimNode[] = rawNodes.map((n, i) => ({
+        id: n.id,
+        x: Math.cos(2 * Math.PI * i / rawNodes.length) * 300 + Math.random() * 50,
+        y: Math.sin(2 * Math.PI * i / rawNodes.length) * 300 + Math.random() * 50,
+        _original: n,
+    }));
 
-    Dagre.layout(g);
+    const nodeMap = new Map(simNodes.map(n => [n.id, n]));
+
+    // Build simulation links
+    const simLinks: SimulationLinkDatum<SimNode>[] = rawEdges
+        .filter(e => nodeMap.has(e.source) && nodeMap.has(e.target))
+        .map(e => ({
+            source: e.source,
+            target: e.target,
+        }));
+
+    // Run force simulation synchronously
+    const sim = forceSimulation<SimNode>(simNodes)
+        .force('link', forceLink<SimNode, SimulationLinkDatum<SimNode>>(simLinks)
+            .id(d => d.id)
+            .distance(200)
+            .strength(0.7)
+        )
+        .force('charge', forceManyBody<SimNode>().strength(-800))
+        .force('center', forceCenter(0, 0))
+        .force('collide', forceCollide<SimNode>(NODE_W * 0.6))
+        .force('x', forceX<SimNode>(0).strength(0.05))
+        .force('y', forceY<SimNode>(0).strength(0.05))
+        .stop();
+
+    // Run 200 ticks to converge
+    for (let i = 0; i < 200; i++) sim.tick();
 
     return {
-        nodes: rawNodes.map(n => {
-            const d = g.node(n.id);
-            return { ...n, position: { x: d.x - 100, y: d.y - 42 } };
-        }),
+        nodes: simNodes.map(sn => ({
+            ...sn._original,
+            position: { x: (sn.x ?? 0) - NODE_W / 2, y: (sn.y ?? 0) - NODE_H / 2 },
+        })),
         edges: rawEdges,
     };
 }
@@ -181,7 +215,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                 if (!data.success) { setError(data.message || 'Failed'); return; }
                 if (data.nodes.length === 0) { setNodes([]); setEdges([]); return; }
 
-                const laid = applyDagreLayout(data.nodes, data.edges);
+                const laid = applyForceLayout(data.nodes, data.edges);
                 const entries = detectEntryPoints(laid.nodes, laid.edges);
                 setEntryPointIds(entries);
 

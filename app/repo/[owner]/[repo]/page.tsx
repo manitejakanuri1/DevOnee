@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Menu, X, MessageCircle, Shield, GitBranch, Lock, AlertTriangle,
     FileText, Bot, LayoutDashboard, Trophy, Share2, Terminal,
-    Network, Brain, RefreshCw, Loader2, BookOpen, Clock,
+    Network, RefreshCw, Loader2, BookOpen, Clock,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -19,7 +19,6 @@ import { ReadmePreview } from '@/components/repo-dashboard/readme-preview';
 import { FileViewer } from '@/components/repo-dashboard/file-viewer';
 import { ChallengeBoard } from '@/components/challenge-board';
 import { FlowchartView } from '@/components/flowchart/flowchart-view';
-import { MindmapView } from '@/components/flowchart/mindmap-view';
 import { ContributeSandbox } from '@/components/contribute-sandbox';
 import { DryRunPanel } from '@/components/dry-run-panel';
 import { LicenseWarning } from '@/components/repo-dashboard/license-warning';
@@ -39,44 +38,9 @@ const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'agent', label: 'Agent', icon: <Bot size={14} /> },
 ];
 
-// ── Codebase Map sub-tab with Flowchart/Mindmap toggle ──
+// ── Codebase Map — Import Graph only ──
 function CodebaseMapTab({ owner, repo, branch }: { owner: string; repo: string; branch: string }) {
-    const [mapView, setMapView] = useState<'mindmap' | 'flowchart'>('mindmap');
-
-    return (
-        <div className="space-y-4">
-            {/* Toggle bar */}
-            <div className="flex items-center gap-1 bg-slate-800/50 border border-slate-700 rounded-xl p-1 w-fit">
-                <button
-                    onClick={() => setMapView('mindmap')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        mapView === 'mindmap'
-                            ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30'
-                            : 'text-slate-400 hover:text-slate-200 border border-transparent'
-                    }`}
-                >
-                    <Brain size={14} /> Mindmap
-                </button>
-                <button
-                    onClick={() => setMapView('flowchart')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        mapView === 'flowchart'
-                            ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                            : 'text-slate-400 hover:text-slate-200 border border-transparent'
-                    }`}
-                >
-                    <Network size={14} /> Import Graph
-                </button>
-            </div>
-
-            {/* View */}
-            {mapView === 'mindmap' ? (
-                <MindmapView owner={owner} repo={repo} branch={branch} />
-            ) : (
-                <FlowchartView owner={owner} repo={repo} branch={branch} />
-            )}
-        </div>
-    );
+    return <FlowchartView owner={owner} repo={repo} branch={branch} />;
 }
 
 export default function RepositoryDashboard({ params }: { params: { owner: string; repo: string } }) {
