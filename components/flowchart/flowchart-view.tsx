@@ -111,22 +111,59 @@ function applyForceLayout(
     };
 }
 
-/* ── Detect entry points ── */
+/* ── Detect the SINGLE best entry point ── */
+const ENTRY_PRIORITY: Record<string, number> = {
+    'App.tsx': 10, 'App.jsx': 10, 'App.ts': 10, 'App.js': 10,
+    'app.tsx': 9, 'app.jsx': 9, 'app.ts': 9, 'app.js': 9, 'app.py': 9,
+    'main.tsx': 8, 'main.ts': 8, 'main.js': 8, 'main.jsx': 8, 'main.py': 8, 'main.go': 8, 'main.rs': 8,
+    'index.tsx': 7, 'index.ts': 7, 'index.js': 7, 'index.jsx': 7,
+    'page.tsx': 6, 'page.ts': 6, 'page.js': 6, 'page.jsx': 6,
+    'server.ts': 5, 'server.js': 5,
+    'layout.tsx': 4, 'layout.ts': 4, 'layout.js': 4, 'layout.jsx': 4,
+};
+
 function detectEntryPoints(nodes: Node[], edges: Edge[]): Set<string> {
-    const ids = new Set<string>();
-    const incoming = new Map<string, number>();
     const outgoing = new Map<string, number>();
-    nodes.forEach(n => { incoming.set(n.id, 0); outgoing.set(n.id, 0); });
-    edges.forEach(e => {
-        incoming.set(e.target, (incoming.get(e.target) || 0) + 1);
-        outgoing.set(e.source, (outgoing.get(e.source) || 0) + 1);
-    });
+    nodes.forEach(n => outgoing.set(n.id, 0));
+    edges.forEach(e => outgoing.set(e.source, (outgoing.get(e.source) || 0) + 1));
+
+    // Score each node: higher = more likely the true entry
+    let bestId: string | null = null;
+    let bestScore = -1;
+
     nodes.forEach(n => {
         const name = ((n.data as any)?.label || '').split('/').pop() || '';
-        if (ENTRY_NAMES.has(name)) { ids.add(n.id); return; }
-        if ((incoming.get(n.id) || 0) === 0 && (outgoing.get(n.id) || 0) > 0) ids.add(n.id);
+        const namePriority = ENTRY_PRIORITY[name] || 0;
+        if (namePriority === 0) return; // only consider known entry filenames
+        // Prefer files that export more (higher outgoing edges)
+        const score = namePriority * 100 + (outgoing.get(n.id) || 0);
+        // Prefer shorter paths (root-level files)
+        const depth = ((n.data as any)?.fullPath || '').split('/').length;
+        const finalScore = score - depth;
+        if (finalScore > bestScore) {
+            bestScore = finalScore;
+            bestId = n.id;
+        }
     });
-    return ids;
+
+    // Fallback: node with most outgoing edges and zero incoming
+    if (!bestId) {
+        const incoming = new Map<string, number>();
+        nodes.forEach(n => incoming.set(n.id, 0));
+        edges.forEach(e => incoming.set(e.target, (incoming.get(e.target) || 0) + 1));
+
+        nodes.forEach(n => {
+            if ((incoming.get(n.id) || 0) === 0 && (outgoing.get(n.id) || 0) > 0) {
+                const score = outgoing.get(n.id) || 0;
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestId = n.id;
+                }
+            }
+        });
+    }
+
+    return bestId ? new Set([bestId]) : new Set<string>();
 }
 
 /* ── Compute folder groups from laid-out nodes ── */
