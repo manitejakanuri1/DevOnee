@@ -645,9 +645,11 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
 
                     <div style={{ width: '1px', height: '28px', background: 'rgba(255,255,255,0.08)' }} />
 
-                    {/* Open File button */}
+                    {/* Open File button — opens in new tab so user stays on the map */}
                     <a
                         href={`/repo/${owner}/${repo}/blob/${selectedInfo.fullPath}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         style={{
                             display: 'flex', alignItems: 'center', gap: '6px',
                             padding: '6px 12px', borderRadius: '8px',

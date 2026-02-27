@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Menu, X, MessageCircle, Shield, GitBranch, Lock, AlertTriangle,
@@ -43,8 +43,17 @@ function CodebaseMapTab({ owner, repo, branch }: { owner: string; repo: string; 
     return <FlowchartView owner={owner} repo={repo} branch={branch} />;
 }
 
-export default function RepositoryDashboard({ params }: { params: { owner: string; repo: string } }) {
+export default function RepositoryDashboardPage({ params }: { params: { owner: string; repo: string } }) {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-[#0a0a0f]" />}>
+            <RepositoryDashboard params={params} />
+        </Suspense>
+    );
+}
+
+function RepositoryDashboard({ params }: { params: { owner: string; repo: string } }) {
     const router = useRouter();
+    const searchParams = useSearchParams();
 
     // Core repo state
     const [owner, setOwner] = useState(params.owner);
@@ -62,8 +71,24 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
     const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
     const [activeFile, setActiveFile] = useState<string | null>(null);
 
-    // Tab state
-    const [activeTab, setActiveTab] = useState<Tab>('overview');
+    // Tab state — read from URL ?tab= param so back-navigation preserves it
+    const tabFromUrl = searchParams.get('tab') as Tab | null;
+    const validTabs: Tab[] = ['overview', 'challenges', 'map', 'contribute', 'community', 'agent'];
+    const [activeTab, setActiveTab] = useState<Tab>(
+        tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'overview'
+    );
+
+    // Sync tab changes to URL (replace, not push, to avoid polluting history)
+    const handleTabChange = useCallback((tab: Tab) => {
+        setActiveTab(tab);
+        const url = new URL(window.location.href);
+        if (tab === 'overview') {
+            url.searchParams.delete('tab');
+        } else {
+            url.searchParams.set('tab', tab);
+        }
+        window.history.replaceState({}, '', url.toString());
+    }, []);
     const [selectedChallenge, setSelectedChallenge] = useState<any>(null);
     const [showDryRun, setShowDryRun] = useState(false);
     const [dryRunChallenge, setDryRunChallenge] = useState<any>(null);
@@ -266,19 +291,19 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
     const handleFileClick = (filePath: string) => {
         setActiveFile(filePath);
-        setActiveTab('overview');
+        handleTabChange('overview');
         setSidebarOpen(false);
     };
 
     const handleSelectChallenge = (challenge: any) => {
         setSelectedChallenge(challenge);
-        setActiveTab('contribute');
+        handleTabChange('contribute');
     };
 
     const handleDryRun = (challenge: any) => {
         setDryRunChallenge(challenge);
         setShowDryRun(true);
-        setActiveTab('contribute');
+        handleTabChange('contribute');
     };
 
     const handleAddToChat = useCallback(() => {
@@ -347,7 +372,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                     return (
                         <button
                             key={tab.key}
-                            onClick={() => { setActiveTab(tab.key); setActiveFile(null); }}
+                            onClick={() => { handleTabChange(tab.key); setActiveFile(null); }}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
                                 activeTab === tab.key
                                     ? 'bg-white/10 text-white'
