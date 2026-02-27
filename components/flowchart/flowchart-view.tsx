@@ -17,6 +17,7 @@ import '@xyflow/react/dist/style.css';
 import Dagre from '@dagrejs/dagre';
 import { Loader2, AlertCircle, Network, FileCode, FolderTree } from 'lucide-react';
 import { CustomFileNode } from './custom-node';
+import { buildBlobUrl } from '@/lib/path-utils';
 
 interface FlowchartViewProps {
     owner: string;
@@ -111,7 +112,7 @@ export function FlowchartView({ owner, repo }: FlowchartViewProps) {
         (_event: React.MouseEvent, node: Node) => {
             const fullPath = (node.data as any)?.fullPath;
             if (fullPath) {
-                router.push(`/repo/${owner}/${repo}/blob/${fullPath}`);
+                router.push(buildBlobUrl(owner, repo, fullPath));
             }
         },
         [owner, repo, router]

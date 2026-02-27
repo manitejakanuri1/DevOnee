@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { Loader2, X, FileCode, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { buildBlobUrl } from "@/lib/path-utils";
 
 interface DependencyGraphProps {
     owner: string;
@@ -237,7 +238,7 @@ export function DependencyGraph({ owner, repo }: DependencyGraphProps) {
                         </div>
 
                         <a
-                            href={`/repo/${owner}/${repo}/blob/${selectedNode.id}`}
+                            href={buildBlobUrl(owner, repo, selectedNode.id)}
                             className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 mt-2"
                         >
                             View File <ExternalLink size={12} />

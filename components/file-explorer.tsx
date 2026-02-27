@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Folder, File, ChevronRight, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { safePath } from '@/lib/path-utils';
 
 interface TreeNode {
     path: string;
@@ -139,7 +140,7 @@ function TreeView({ node, selectedFiles, onSelectFiles, onFileClick, level, defa
         if (node.type === 'tree') {
             setIsOpen(!isOpen);
         } else {
-            onFileClick(node.path);
+            onFileClick(safePath(node.path));
         }
     };
 

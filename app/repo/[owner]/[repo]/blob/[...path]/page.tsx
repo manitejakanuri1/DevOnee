@@ -6,10 +6,11 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ArrowLeft, Loader2, FileCode2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { safePathFromSegments } from '@/lib/path-utils';
 
 export default function BlobViewer({ params }: { params: { owner: string, repo: string, path: string[] } }) {
     const router = useRouter();
-    const filePath = params.path.join('/');
+    const filePath = safePathFromSegments(params.path);
 
     const [content, setContent] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);

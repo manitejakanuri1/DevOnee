@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { X, FileCode, AlertCircle } from 'lucide-react';
+import { safePath } from '@/lib/path-utils';
 
 interface FileViewerProps {
     owner: string;
@@ -36,6 +37,7 @@ export function FileViewer({ owner, repo, filePath, branch, onClose }: FileViewe
     const [content, setContent] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const cleanPath = safePath(filePath);
 
     useEffect(() => {
         setLoading(true);
@@ -44,7 +46,7 @@ export function FileViewer({ owner, repo, filePath, branch, onClose }: FileViewe
         fetch('/api/github/content', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ owner, repo, path: filePath, ref: branch })
+            body: JSON.stringify({ owner, repo, path: cleanPath, ref: branch })
         })
             .then(res => res.json())
             .then(data => {
@@ -56,10 +58,10 @@ export function FileViewer({ owner, repo, filePath, branch, onClose }: FileViewe
             })
             .catch(err => setError(err.message))
             .finally(() => setLoading(false));
-    }, [owner, repo, filePath, branch]);
+    }, [owner, repo, cleanPath, branch]);
 
-    const parts = filePath.split('/');
-    const language = getLanguage(filePath);
+    const parts = cleanPath.split('/');
+    const language = getLanguage(cleanPath);
 
     return (
         <div className="glass-card rounded-2xl overflow-hidden">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchFileTree } from "@/lib/github";
+import { normalizePath } from "@/lib/path-utils";
 
 function getNodeType(path: string): { type: string; color: string } {
     const lower = path.toLowerCase();
@@ -55,16 +56,17 @@ export async function POST(req: NextRequest) {
         const links: { source: string; target: string; value: number }[] = [];
 
         files.forEach((file: any) => {
-            const pathParts = file.path.split("/");
-            const { type, color } = getNodeType(file.path);
+            const cleanPath = normalizePath(file.path);
+            const pathParts = cleanPath.split("/");
+            const { type, color } = getNodeType(cleanPath);
 
             nodes.push({
-                id: file.path,
+                id: cleanPath,
                 name: pathParts[pathParts.length - 1],
                 group: pathParts.length > 1 ? pathParts.length : 1,
                 type,
                 color,
-                beginner_friendly: isBeginnerFriendly(file.path),
+                beginner_friendly: isBeginnerFriendly(cleanPath),
             });
 
             // Simulate linkage based on folder proximity

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import NodeCache from 'node-cache';
 import path from 'path';
 import { fetchFileTree, fetchFileContent } from '@/lib/github';
+import { safePath } from '@/lib/path-utils';
 
 const flowchartCache = new NodeCache({ stdTTL: 3600 });
 
@@ -588,7 +589,7 @@ function buildFolderGraph(
             type: 'custom',
             data: {
                 label: `${parts[parts.length - 1]}/ (${fileCount})`,
-                fullPath: dir,
+                fullPath: safePath(dir),
                 fileType,
                 color,
                 isFolder: true,
@@ -624,7 +625,7 @@ function buildFolderGraph(
                 type: 'custom',
                 data: {
                     label: path.posix.basename(f),
-                    fullPath: f,
+                    fullPath: safePath(f),
                     fileType,
                     color,
                 },
@@ -778,7 +779,7 @@ export async function POST(req: NextRequest) {
                     type: 'custom',
                     data: {
                         label: fileName,
-                        fullPath: filePath,
+                        fullPath: safePath(filePath),
                         fileType,
                         color,
                         imports: outCount,

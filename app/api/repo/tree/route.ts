@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchFileTree, fetchRepoMetadata } from '@/lib/github';
+import { normalizePath } from '@/lib/path-utils';
 
 interface TreeNode {
     path: string;
@@ -22,16 +23,17 @@ function buildNestedTree(flatTree: Array<{ path: string; type: string; size?: nu
     });
 
     for (const item of sorted) {
-        const parts = item.path.split('/');
+        const cleanPath = normalizePath(item.path);
+        const parts = cleanPath.split('/');
         const name = parts[parts.length - 1];
         const node: TreeNode = {
-            path: item.path,
+            path: cleanPath,
             name,
             type: item.type as 'tree' | 'blob',
             size: item.size,
             children: item.type === 'tree' ? [] : undefined,
         };
-        map.set(item.path, node);
+        map.set(cleanPath, node);
 
         if (parts.length === 1) {
             root.push(node);

@@ -1,4 +1,5 @@
 import NodeCache from 'node-cache';
+import { safePath } from '@/lib/path-utils';
 
 // Initialize cache with 1 hour TTL standard
 const githubCache = new NodeCache({ stdTTL: 3600 });
@@ -51,7 +52,8 @@ export async function fetchFileTree(owner: string, repo: string, branch: string)
     return data;
 }
 
-export async function fetchFileContent(owner: string, repo: string, path: string, ref: string) {
+export async function fetchFileContent(owner: string, repo: string, rawPath: string, ref: string) {
+    const path = safePath(rawPath);
     const cacheKey = `content_${owner}_${repo}_${path}_${ref}`;
     const cached = githubCache.get(cacheKey);
     if (cached) return cached;

@@ -14,6 +14,7 @@ import {
     Code2,
     GitPullRequest,
 } from "lucide-react";
+import { safePath } from "@/lib/path-utils";
 
 interface DryRunPrediction {
     tests: { status: "pass" | "warn" | "fail"; reason: string };
@@ -74,7 +75,7 @@ export function DryRunPanel({
                 body: JSON.stringify({
                     owner,
                     repo,
-                    filePath,
+                    filePath: safePath(filePath),
                     originalContent,
                     newContent,
                     challengeId,

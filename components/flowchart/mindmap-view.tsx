@@ -16,6 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Loader2, AlertCircle, Brain, ChevronRight } from 'lucide-react';
 import { CustomFileNode } from './custom-node';
+import { buildBlobUrl, safePath } from '@/lib/path-utils';
 
 interface MindmapViewProps {
     owner: string;
@@ -156,7 +157,7 @@ function computeRadialLayout(
                 type: 'custom',
                 data: {
                     label: isFolder ? `${child.name}/ (${fileCount})` : child.name,
-                    fullPath: child.path,
+                    fullPath: safePath(child.path),
                     fileType,
                     color,
                     isFolder,
@@ -288,7 +289,7 @@ export function MindmapView({ owner, repo }: MindmapViewProps) {
                     return next;
                 });
             } else if (!data.isFolder && data.fullPath) {
-                router.push(`/repo/${owner}/${repo}/blob/${data.fullPath}`);
+                router.push(buildBlobUrl(owner, repo, data.fullPath));
             }
         },
         [owner, repo, router]
