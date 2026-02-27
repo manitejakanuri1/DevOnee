@@ -212,3 +212,73 @@ create policy "Users can view their own usage" on usage
     identifier = auth.uid()::text
     or identifier = current_setting('request.jwt.claims', true)::json->>'guest_id'
   );
+
+-- ============================================
+-- GAMIFICATION EXTENSIONS
+-- ============================================
+
+-- Add gamification columns to profiles
+alter table profiles
+  add column if not exists xp_total integer default 0,
+  add column if not exists level text default 'Beginner',
+  add column if not exists streak_days integer default 0,
+  add column if not exists last_contribution_date date;
+
+-- Add extra columns to contributions
+alter table contributions
+  add column if not exists challenge_id uuid,
+  add column if not exists xp_earned integer default 0,
+  add column if not exists pr_title text,
+  add column if not exists pr_body text,
+  add column if not exists branch_name text,
+  add column if not exists fork_owner text;
+
+-- Challenges table
+create table challenges (
+  id uuid default gen_random_uuid() primary key,
+  repository_id uuid references repositories(id) on delete cascade not null,
+  title text not null,
+  description text not null,
+  difficulty text not null check (difficulty in ('easy', 'medium', 'hard')),
+  category text not null check (category in ('docs', 'tests', 'bugfix', 'feature', 'refactor')),
+  xp_reward integer not null default 50,
+  target_files text[] default '{}',
+  steps text[] default '{}',
+  status text default 'open',
+  created_at timestamptz default now()
+);
+
+-- Dry run results table
+create table dry_run_results (
+  id uuid default gen_random_uuid() primary key,
+  challenge_id uuid references challenges(id) on delete cascade,
+  profile_id uuid references profiles(id) on delete cascade,
+  repository_id uuid references repositories(id) on delete cascade not null,
+  original_content text,
+  new_content text,
+  prediction jsonb not null,
+  risk_score integer not null check (risk_score between 1 and 10),
+  created_at timestamptz default now()
+);
+
+-- Foreign key for challenge_id in contributions
+alter table contributions
+  add constraint fk_contributions_challenge
+  foreign key (challenge_id) references challenges(id) on delete set null;
+
+-- Indexes
+create index idx_challenges_repository_id on challenges(repository_id);
+create index idx_challenges_difficulty on challenges(difficulty);
+create index idx_dry_run_results_challenge_id on dry_run_results(challenge_id);
+create index idx_dry_run_results_profile_id on dry_run_results(profile_id);
+create index idx_contributions_challenge_id on contributions(challenge_id);
+
+-- RLS
+alter table challenges enable row level security;
+alter table dry_run_results enable row level security;
+
+create policy "Anyone can view challenges" on challenges for select using (true);
+create policy "Users can view their own dry runs" on dry_run_results
+  for select using (profile_id = auth.uid());
+create policy "Users can insert their own dry runs" on dry_run_results
+  for insert with check (profile_id = auth.uid());

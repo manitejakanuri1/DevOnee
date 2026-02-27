@@ -53,9 +53,9 @@ Overview:
             overview = result.response.text() || "Could not generate overview.";
 
             // Save the generated overview to the database asynchronously
-            await supabase
+            await (supabase as any)
                 .from('repositories')
-                .update({ summary: overview } as any)
+                .update({ summary: overview })
                 .eq('id', (repository as any).id);
         }
 

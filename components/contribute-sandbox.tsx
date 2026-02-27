@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Terminal, Send, CheckCircle2, AlertTriangle, Loader2, GitPullRequest } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Terminal, Send, CheckCircle2, AlertTriangle, Loader2, GitPullRequest, GitFork, GitBranch, FileCode, ExternalLink, Trophy } from 'lucide-react';
 import { GithubDiff, DiffLine } from '@/components/ui/github-inline-diff';
 import { useSession, signIn } from 'next-auth/react';
 
@@ -10,15 +10,27 @@ interface ContributeSandboxProps {
     owner: string;
     repo: string;
     suggestion: { title: string; description: string; files: string[]; steps: string[] } | null;
+    challengeId?: string;
+    onPrCreated?: (xpEarned: number) => void;
 }
 
-export function ContributeSandbox({ owner, repo, suggestion }: ContributeSandboxProps) {
-    const { data: session } = useSession();
-    const [activeTab, setActiveTab] = useState<'editor' | 'review' | 'pr'>('editor');
-    const [forkUrl, setForkUrl] = useState('');
+const PR_STEPS = [
+    { key: 'fork', label: 'Forking repository', icon: GitFork },
+    { key: 'branch', label: 'Creating branch', icon: GitBranch },
+    { key: 'commit', label: 'Committing changes', icon: FileCode },
+    { key: 'pr', label: 'Opening pull request', icon: GitPullRequest },
+];
 
-    // Mock Editor State
-    const [editorContent, setEditorContent] = useState("// Make your changes here...\n\nfunction fixIssue() {\n  console.log('Fixed!');\n}");
+export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCreated }: ContributeSandboxProps) {
+    const { data: session } = useSession();
+    const [activeTab, setActiveTab] = useState<'editor' | 'review'>('editor');
+
+    // Editor state
+    const [editorContent, setEditorContent] = useState(
+        suggestion?.steps
+            ? `// Task: ${suggestion.title}\n// File: ${suggestion.files?.[0] || 'src/index.ts'}\n\n// Make your changes here...\n`
+            : "// Make your changes here...\n\nfunction fixIssue() {\n  console.log('Fixed!');\n}"
+    );
 
     // Review flow
     const [reviewLoading, setReviewLoading] = useState(false);
@@ -27,7 +39,15 @@ export function ContributeSandbox({ owner, repo, suggestion }: ContributeSandbox
 
     // PR flow
     const [prLoading, setPrLoading] = useState(false);
-    const [prResult, setPrResult] = useState<{ success?: boolean, prUrl?: string, branchUrl?: string, error?: string } | null>(null);
+    const [prStep, setPrStep] = useState(-1);
+    const [prResult, setPrResult] = useState<{
+        success?: boolean;
+        prUrl?: string;
+        branchUrl?: string;
+        error?: string;
+        xpEarned?: number;
+    } | null>(null);
+    const [showConfirm, setShowConfirm] = useState(false);
 
     const handleReview = async () => {
         setReviewLoading(true);
@@ -41,7 +61,6 @@ export function ContributeSandbox({ owner, repo, suggestion }: ContributeSandbox
             const data = await res.json();
             setFeedback(data.success ? data.feedback : data.message);
 
-            // Generate mock diff lines based on the user's content for the Sandbox
             const lines = editorContent.split('\n');
             const mockDiff: DiffLine[] = lines.map((content, idx) => ({
                 type: idx % 3 === 0 ? 'addition' : 'context',
@@ -50,8 +69,7 @@ export function ContributeSandbox({ owner, repo, suggestion }: ContributeSandbox
                 content
             }));
             setDiffLines(mockDiff);
-
-        } catch (err: any) {
+        } catch {
             setFeedback("Failed to fetch AI review.");
         } finally {
             setReviewLoading(false);
@@ -59,47 +77,64 @@ export function ContributeSandbox({ owner, repo, suggestion }: ContributeSandbox
     };
 
     const handleCreatePR = async () => {
+        setShowConfirm(false);
         setPrLoading(true);
-
-        let parsedForkOwner = '';
-        if (forkUrl) {
-            const regex = /(?:github\.com\/)?([a-zA-Z0-9.-]+)\/[a-zA-Z0-9.-]+/;
-            const match = forkUrl.match(regex);
-            if (match && match[1]) {
-                parsedForkOwner = match[1];
-            }
-        }
+        setPrStep(0);
 
         try {
+            // Simulate step progression for UX
+            const stepInterval = setInterval(() => {
+                setPrStep(prev => Math.min(prev + 1, PR_STEPS.length - 1));
+            }, 3000);
+
             const res = await fetch('/api/contribution/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     owner,
                     repo,
-                    forkOwner: parsedForkOwner,
-                    branchName: `fix-${Date.now()}`,
-                    changes: [{ path: suggestion?.files[0] || 'src/index.ts', content: editorContent }],
-                    prDetails: { title: `Feature: ${suggestion?.title || 'Automated Patch'}` }
+                    changes: [{
+                        path: suggestion?.files[0] || 'src/index.ts',
+                        content: editorContent
+                    }],
+                    prDetails: {
+                        title: `DevOne: ${suggestion?.title || 'Automated contribution'}`,
+                        description: suggestion?.description || 'Contribution via DevOne AI platform',
+                    },
+                    challengeId: challengeId || null,
                 })
             });
+
+            clearInterval(stepInterval);
             const data = await res.json();
-            setPrResult(data);
+
+            if (data.success) {
+                setPrStep(PR_STEPS.length);
+                setPrResult({
+                    success: true,
+                    prUrl: data.prUrl,
+                    branchUrl: data.branchUrl,
+                    xpEarned: suggestion ? 50 : 25,
+                });
+                onPrCreated?.(suggestion ? 50 : 25);
+            } else {
+                setPrResult({ error: data.error || data.message || "Failed to create PR" });
+            }
         } catch (err: any) {
-            setPrResult({ error: "Failed to create PR mockup." });
+            setPrResult({ error: err.message || "Failed to create PR." });
         } finally {
             setPrLoading(false);
         }
-    }
+    };
 
     return (
         <div className="bg-slate-800/80 border border-slate-700 rounded-2xl overflow-hidden mt-6 shadow-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Header */}
             <div className="bg-slate-900 border-b border-slate-700 p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
                 <h3 className="text-lg font-bold flex items-center gap-2 text-white">
                     <Terminal className="text-green-400" />
                     Contribution Sandbox
                 </h3>
-
                 <div className="flex gap-2">
                     <button
                         onClick={() => setActiveTab('editor')}
@@ -116,6 +151,7 @@ export function ContributeSandbox({ owner, repo, suggestion }: ContributeSandbox
                 </div>
             </div>
 
+            {/* Content Area */}
             <div className="p-0 border-b border-slate-700 min-h-[350px] flex flex-col bg-[#1e1e1e]">
                 {activeTab === 'editor' ? (
                     <textarea
@@ -154,50 +190,133 @@ export function ContributeSandbox({ owner, repo, suggestion }: ContributeSandbox
                                     </div>
                                 )}
 
-                                {!prResult && (
-                                    <div className="pt-4 border-t border-slate-800 flex flex-col md:flex-row items-end md:items-center justify-between gap-4">
+                                {/* PR Creation Section */}
+                                {!prResult && !prLoading && (
+                                    <div className="pt-4 border-t border-slate-800 flex flex-col md:flex-row items-end md:items-center justify-end gap-4">
                                         {!session ? (
                                             <button
                                                 onClick={() => signIn('github')}
-                                                className="bg-slate-700 hover:bg-slate-600 w-full md:w-auto text-white px-5 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors ml-auto"
+                                                className="bg-slate-700 hover:bg-slate-600 w-full md:w-auto text-white px-5 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors"
                                             >
                                                 Sign In to GitHub to Contribute
                                             </button>
                                         ) : (
-                                            <>
-                                                <input
-                                                    type="text"
-                                                    value={forkUrl}
-                                                    onChange={(e) => setForkUrl(e.target.value)}
-                                                    placeholder="Paste your fork URL (Required: github.com/you/repo)"
-                                                    className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 max-w-sm"
-                                                />
-                                                <button
-                                                    onClick={handleCreatePR}
-                                                    disabled={prLoading || !forkUrl.trim()}
-                                                    className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors"
-                                                >
-                                                    {prLoading ? <Loader2 size={18} className="animate-spin" /> : <GitPullRequest size={18} />}
-                                                    {prLoading ? 'Submitting to GitHub...' : 'Looks good, create PR!'}
-                                                </button>
-                                            </>
+                                            <button
+                                                onClick={() => setShowConfirm(true)}
+                                                className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors"
+                                            >
+                                                <GitPullRequest size={18} />
+                                                Create Pull Request
+                                            </button>
                                         )}
                                     </div>
                                 )}
 
-                                {prResult?.success && (
-                                    <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3">
-                                        <CheckCircle2 className="text-green-500 shrink-0" size={24} />
-                                        <div>
-                                            <p className="font-semibold text-green-400 mb-1">Success! PR Draft Created.</p>
-                                            <p className="text-sm text-green-200/80">
-                                                Simulated pull request created at <a href={prResult.prUrl} target="_blank" className="underline hover:text-white">GitHub</a>
+                                {/* Confirmation Dialog */}
+                                <AnimatePresence>
+                                    {showConfirm && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.95 }}
+                                            className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl space-y-3"
+                                        >
+                                            <p className="text-yellow-200 font-medium">Confirm Pull Request</p>
+                                            <p className="text-sm text-yellow-100/70">
+                                                This will fork <span className="font-mono text-yellow-300">{owner}/{repo}</span>, create a branch, commit your changes, and open a real PR on GitHub.
                                             </p>
-                                        </div>
+                                            <div className="flex gap-3 justify-end">
+                                                <button
+                                                    onClick={() => setShowConfirm(false)}
+                                                    className="px-4 py-2 text-sm rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={handleCreatePR}
+                                                    className="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 font-semibold flex items-center gap-2"
+                                                >
+                                                    <GitPullRequest size={16} />
+                                                    Confirm & Create PR
+                                                </button>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
+                                {/* Step-by-step Progress */}
+                                {prLoading && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-3"
+                                    >
+                                        <p className="text-blue-300 font-medium mb-3">Creating Pull Request...</p>
+                                        {PR_STEPS.map((step, idx) => {
+                                            const StepIcon = step.icon;
+                                            const isActive = idx === prStep;
+                                            const isDone = idx < prStep;
+                                            return (
+                                                <div key={step.key} className="flex items-center gap-3">
+                                                    {isDone ? (
+                                                        <CheckCircle2 size={18} className="text-green-400" />
+                                                    ) : isActive ? (
+                                                        <Loader2 size={18} className="text-blue-400 animate-spin" />
+                                                    ) : (
+                                                        <StepIcon size={18} className="text-slate-600" />
+                                                    )}
+                                                    <span className={`text-sm ${isDone ? 'text-green-300' : isActive ? 'text-blue-300' : 'text-slate-500'}`}>
+                                                        {step.label}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
                                     </motion.div>
                                 )}
+
+                                {/* Success */}
+                                {prResult?.success && (
+                                    <motion.div
+                                        initial={{ scale: 0.95, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl space-y-3"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <CheckCircle2 className="text-green-500 shrink-0" size={24} />
+                                            <div>
+                                                <p className="font-semibold text-green-400 mb-1">Pull Request Created!</p>
+                                                <a
+                                                    href={prResult.prUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-sm text-green-200/80 hover:text-white underline flex items-center gap-1"
+                                                >
+                                                    View on GitHub <ExternalLink size={14} />
+                                                </a>
+                                            </div>
+                                        </div>
+
+                                        {prResult.xpEarned && (
+                                            <motion.div
+                                                initial={{ y: 20, opacity: 0 }}
+                                                animate={{ y: 0, opacity: 1 }}
+                                                transition={{ delay: 0.5 }}
+                                                className="flex items-center gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg"
+                                            >
+                                                <Trophy className="text-yellow-400" size={20} />
+                                                <span className="text-yellow-300 font-bold">+{prResult.xpEarned} XP earned!</span>
+                                            </motion.div>
+                                        )}
+                                    </motion.div>
+                                )}
+
+                                {/* Error */}
                                 {prResult?.error && (
-                                    <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3">
+                                    <motion.div
+                                        initial={{ scale: 0.95, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3"
+                                    >
                                         <AlertTriangle className="text-red-500 shrink-0" size={24} />
                                         <div>
                                             <p className="font-semibold text-red-400">Failed to create PR</p>
@@ -215,6 +334,7 @@ export function ContributeSandbox({ owner, repo, suggestion }: ContributeSandbox
                 )}
             </div>
 
+            {/* Footer */}
             {activeTab === 'editor' && (
                 <div className="bg-slate-900 p-4 flex justify-between items-center">
                     <div className="text-sm text-slate-400 flex items-center gap-2">
