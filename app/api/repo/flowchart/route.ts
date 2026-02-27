@@ -594,6 +594,7 @@ function buildFolderGraph(
                 color,
                 isFolder: true,
                 fileCount,
+                lines: 0,
             },
             position: { x: 0, y: 0 },
         });
@@ -628,6 +629,7 @@ function buildFolderGraph(
                     fullPath: safePath(f),
                     fileType,
                     color,
+                    lines: 0,
                 },
                 position: { x: 0, y: 0 },
             });
@@ -734,6 +736,14 @@ export async function POST(req: NextRequest) {
         // 6. Build final node list
         // Include ALL files that participate in any import relationship
         // (even targets that weren't in the original analysis set)
+        // Build a size lookup from tree data for estimating lines when content isn't available
+        const fileSizeMap = new Map<string, number>();
+        for (const f of treeData.tree) {
+            if (f.type === 'blob' && typeof f.size === 'number') {
+                fileSizeMap.set(f.path, f.size);
+            }
+        }
+
         let finalNodes: any[];
         let finalEdges: any[];
         let mode = 'imports';
@@ -774,6 +784,19 @@ export async function POST(req: NextRequest) {
                     if (e.source === filePath) outCount++;
                 }
 
+                // Count lines: use actual content if fetched, otherwise estimate from file size
+                let lines = 0;
+                const content = contentMap.get(filePath);
+                if (content) {
+                    lines = content.split('\n').length;
+                } else {
+                    const fileSize = fileSizeMap.get(filePath);
+                    if (fileSize) {
+                        // Estimate: average ~30 bytes per line for source code
+                        lines = Math.max(1, Math.round(fileSize / 30));
+                    }
+                }
+
                 return {
                     id: filePath,
                     type: 'custom',
@@ -784,6 +807,7 @@ export async function POST(req: NextRequest) {
                         color,
                         imports: outCount,
                         importedBy: inCount,
+                        lines,
                     },
                     position: { x: 0, y: 0 },
                 };
