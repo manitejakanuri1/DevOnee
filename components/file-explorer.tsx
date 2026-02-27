@@ -406,6 +406,7 @@ function TreeView({ node, selectedSet, onSelectFiles, onFileClick, level, defaul
                 >
                     <Checkbox
                         checked={isBlob ? isChecked : (folderAllSelected ? true : (folderIndeterminate ? 'indeterminate' : false))}
+                        onCheckedChange={() => {/* handled by parent span onClick */}}
                         className={cn(
                             "h-3.5 w-3.5 border-slate-600 transition-opacity",
                             "data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600",

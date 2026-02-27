@@ -22,13 +22,14 @@ const langColors: Record<string, string> = {
     HTML: '#e34c26', CSS: '#563d7c', Vue: '#41b883', Svelte: '#ff3e00',
 };
 
-function formatCount(n: number): string {
+function formatCount(n: number | undefined | null): string {
+    if (n == null || isNaN(n)) return '0';
     if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
     return n.toString();
 }
 
 export function RepoStatsCard({ metadata }: RepoStatsCardProps) {
-    if (!metadata) {
+    if (!metadata || !('stargazers_count' in metadata)) {
         return (
             <div className="glass-card rounded-2xl p-5">
                 <div className="flex gap-6 animate-pulse">

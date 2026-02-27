@@ -141,7 +141,10 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
             .then(res => res.json())
             .then(data => {
                 if (data.default_branch) setBranch(data.default_branch);
-                setRepoMetadata(data);
+                // Only set metadata if the response has expected fields (not a rate-limit error)
+                if (data.full_name || data.stargazers_count !== undefined) {
+                    setRepoMetadata(data);
+                }
             })
             .catch(console.error);
     }, [owner, repo]);
