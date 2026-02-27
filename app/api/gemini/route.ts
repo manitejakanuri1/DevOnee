@@ -81,17 +81,18 @@ ${contextText.substring(0, 10000)}
         const result = await model.generateContent(message);
         const responseText = result.response.text() || "No response generated.";
 
-        // Log prompt usage
-        await supabase.from('prompts').insert({
+        // Log prompt usage and get the ID for feedback
+        const { data: promptRow } = await supabase.from('prompts').insert({
             guest_id: isGuest ? identifier : null,
             profile_id: isGuest ? null : identifier,
             content: message as string,
             response: responseText as string
-        } as any);
+        } as any).select('id').single();
 
         return NextResponse.json({
             success: true,
             response: responseText,
+            promptId: promptRow?.id || null,
             usage: {
                 limit: usage.limit,
                 remaining: Math.max(0, usage.limit - usage.currentCount),

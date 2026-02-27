@@ -81,8 +81,19 @@ create table community_insights (
   id uuid default gen_random_uuid() primary key,
   title text not null,
   content text not null,
+  upvotes int default 0,
   author_id uuid references profiles(id) on delete set null,
   created_at timestamptz default now()
+);
+
+-- Insight vote tracking
+create table insight_votes (
+  id uuid default gen_random_uuid() primary key,
+  insight_id uuid references community_insights(id) on delete cascade,
+  profile_id uuid references profiles(id) on delete cascade,
+  guest_id text,
+  created_at timestamptz default now(),
+  unique(insight_id, profile_id)
 );
 
 -- Repositories

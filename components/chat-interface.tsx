@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Send, FileCode, Bot, User, AlertCircle, Lightbulb, Search } from 'lucide-react';
+import { Send, FileCode, Bot, User, AlertCircle, Lightbulb, Search, ThumbsUp, ThumbsDown, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIInputWithSuggestions } from '@/components/ui/ai-input-with-suggestions';
 
@@ -10,6 +10,7 @@ interface Message {
     id: string;
     role: 'user' | 'assistant';
     content: string;
+    promptId?: string;
 }
 
 interface ChatInterfaceProps {
@@ -25,6 +26,8 @@ export function ChatInterface({ owner, repo, selectedFiles, embedded }: ChatInte
     ]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [feedbackGiven, setFeedbackGiven] = useState<Record<string, 'up' | 'down'>>({});
+    const [copiedId, setCopiedId] = useState<string | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -77,12 +80,32 @@ export function ChatInterface({ owner, repo, selectedFiles, embedded }: ChatInte
                 throw new Error(data.message || 'Failed to fetch response');
             }
 
-            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.response }]);
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: data.response, promptId: data.promptId }]);
         } catch (err: any) {
             setError(err.message || "An unexpected error occurred.");
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleFeedback = async (msgId: string, promptId: string | undefined, vote: 'up' | 'down') => {
+        if (!promptId || feedbackGiven[msgId]) return;
+        setFeedbackGiven(prev => ({ ...prev, [msgId]: vote }));
+        try {
+            await fetch('/api/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ promptId, vote: vote === 'up' })
+            });
+        } catch {
+            // Silent fail — feedback is best-effort
+        }
+    };
+
+    const handleCopy = (msgId: string, content: string) => {
+        navigator.clipboard.writeText(content);
+        setCopiedId(msgId);
+        setTimeout(() => setCopiedId(null), 2000);
     };
 
     return (
@@ -101,8 +124,8 @@ export function ChatInterface({ owner, repo, selectedFiles, embedded }: ChatInte
                         animate={{ opacity: 1, y: 0 }}
                         key={msg.id}
                         className={cn(
-                            "flex w-full",
-                            msg.role === 'user' ? "justify-end" : "justify-start"
+                            "flex flex-col w-full",
+                            msg.role === 'user' ? "items-end" : "items-start"
                         )}
                     >
                         <div className={cn(
@@ -116,6 +139,38 @@ export function ChatInterface({ owner, repo, selectedFiles, embedded }: ChatInte
                                 {msg.content}
                             </div>
                         </div>
+                        {/* Feedback buttons for assistant messages */}
+                        {msg.role === 'assistant' && msg.id !== '1' && (
+                            <div className="flex items-center gap-1 mt-1 ml-8">
+                                <button
+                                    onClick={() => handleFeedback(msg.id, msg.promptId, 'up')}
+                                    className={cn(
+                                        "p-1.5 rounded-lg transition-colors",
+                                        feedbackGiven[msg.id] === 'up' ? "text-blue-400 bg-blue-500/10" : "text-slate-500 hover:text-blue-400 hover:bg-white/5"
+                                    )}
+                                    title="Helpful"
+                                >
+                                    <ThumbsUp size={13} />
+                                </button>
+                                <button
+                                    onClick={() => handleFeedback(msg.id, msg.promptId, 'down')}
+                                    className={cn(
+                                        "p-1.5 rounded-lg transition-colors",
+                                        feedbackGiven[msg.id] === 'down' ? "text-red-400 bg-red-500/10" : "text-slate-500 hover:text-red-400 hover:bg-white/5"
+                                    )}
+                                    title="Not helpful"
+                                >
+                                    <ThumbsDown size={13} />
+                                </button>
+                                <button
+                                    onClick={() => handleCopy(msg.id, msg.content)}
+                                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
+                                    title="Copy"
+                                >
+                                    {copiedId === msg.id ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+                                </button>
+                            </div>
+                        )}
                     </motion.div>
                 ))}
                 {loading && (

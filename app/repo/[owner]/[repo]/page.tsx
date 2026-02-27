@@ -22,14 +22,18 @@ import { MindmapView } from '@/components/flowchart/mindmap-view';
 import { ContributeSandbox } from '@/components/contribute-sandbox';
 import { DryRunPanel } from '@/components/dry-run-panel';
 import { LicenseWarning } from '@/components/repo-dashboard/license-warning';
+import { LicenseWarningDialog, LicenseBanner } from '@/components/license-warning-dialog';
+import { CommunityInsightsTab } from '@/components/community-insights-tab';
+import { Users } from 'lucide-react';
 
-type Tab = 'overview' | 'challenges' | 'map' | 'contribute';
+type Tab = 'overview' | 'challenges' | 'map' | 'contribute' | 'community';
 
 const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: 'Overview', icon: <LayoutDashboard size={14} /> },
     { key: 'challenges', label: 'Challenges', icon: <Trophy size={14} /> },
     { key: 'map', label: 'Codebase Map', icon: <Share2 size={14} /> },
     { key: 'contribute', label: 'Contribute', icon: <Terminal size={14} /> },
+    { key: 'community', label: 'Community', icon: <Users size={14} /> },
 ];
 
 // ── Codebase Map sub-tab with Flowchart/Mindmap toggle ──
@@ -96,6 +100,11 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
     const [showDryRun, setShowDryRun] = useState(false);
     const [dryRunChallenge, setDryRunChallenge] = useState<any>(null);
 
+    // License state
+    const [licenseData, setLicenseData] = useState<any>(null);
+    const [showLicenseWarning, setShowLicenseWarning] = useState(false);
+    const [showLicenseBanner, setShowLicenseBanner] = useState(true);
+
     // Responsive panel state
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
@@ -108,6 +117,9 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
         setRepoMetadata(null);
         setActiveFile(null);
         setSelectedFiles([]);
+        setLicenseData(null);
+        setShowLicenseWarning(false);
+        setShowLicenseBanner(true);
 
         // Fetch overview
         fetch('/api/repo/overview', {
@@ -147,6 +159,23 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                 }
             })
             .catch(console.error);
+
+        // Fetch license data for warning dialog
+        fetch('/api/repo/license', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ owner, repo })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.license) {
+                    setLicenseData(data.license);
+                    if (data.license.warningLevel === 'danger') {
+                        setShowLicenseWarning(true);
+                    }
+                }
+            })
+            .catch(console.error);
     }, [owner, repo]);
 
     const handleRepoNavigate = (newOwner: string, newRepo: string) => {
@@ -178,6 +207,12 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
     return (
         <div className="h-screen bg-[#0B1120] text-slate-50 flex flex-col overflow-hidden">
+            {/* License warning popup for danger-level licenses */}
+            <LicenseWarningDialog
+                license={licenseData}
+                open={showLicenseWarning}
+                onClose={() => setShowLicenseWarning(false)}
+            />
             {/* ── Header ── */}
             <header className="h-14 border-b border-white/5 bg-[#0B1120]/80 backdrop-blur-xl sticky top-0 z-30 flex items-center px-4 gap-3 shrink-0">
                 {/* Mobile sidebar toggle */}
@@ -232,6 +267,11 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                     </button>
                 ))}
             </div>
+
+            {/* Copyleft license banner (warning level) */}
+            {showLicenseBanner && licenseData?.warningLevel === 'warning' && (
+                <LicenseBanner license={licenseData} onDismiss={() => setShowLicenseBanner(false)} />
+            )}
 
             {/* ── Main 3-Panel Area ── */}
             <div className="flex-1 flex overflow-hidden">
@@ -359,6 +399,11 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
                         {/* ── CODEBASE MAP TAB ── */}
                         {activeTab === 'map' && (
                             <CodebaseMapTab owner={owner} repo={repo} branch={branch} />
+                        )}
+
+                        {/* ── COMMUNITY TAB ── */}
+                        {activeTab === 'community' && (
+                            <CommunityInsightsTab owner={owner} repo={repo} />
                         )}
 
                         {/* ── CONTRIBUTE TAB ── */}

@@ -14,7 +14,7 @@ import {
     type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Loader2, AlertCircle, Brain, ChevronRight } from 'lucide-react';
+import { Loader2, AlertCircle, Brain, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
 import { CustomFileNode } from './custom-node';
 import { buildBlobUrl, safePath } from '@/lib/path-utils';
 
@@ -231,6 +231,17 @@ export function MindmapView({ owner, repo, branch }: MindmapViewProps) {
     const [error, setError] = useState<string | null>(null);
     const [treeData, setTreeData] = useState<TreeNode[] | null>(null);
     const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+    const [isFullScreen, setIsFullScreen] = useState(false);
+
+    // Escape key to exit full-screen
+    useEffect(() => {
+        if (!isFullScreen) return;
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsFullScreen(false);
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [isFullScreen]);
 
     // Fetch tree data
     useEffect(() => {
@@ -339,7 +350,9 @@ export function MindmapView({ owner, repo, branch }: MindmapViewProps) {
     }
 
     return (
-        <div className="w-full h-[600px] bg-[#0f172a] rounded-2xl border border-slate-700 overflow-hidden shadow-inner relative">
+        <div className={`w-full bg-[#0f172a] overflow-hidden shadow-inner relative ${
+            isFullScreen ? 'fixed inset-0 z-50 h-screen rounded-none border-none' : 'h-[600px] rounded-2xl border border-slate-700'
+        }`}>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -392,6 +405,15 @@ export function MindmapView({ owner, repo, branch }: MindmapViewProps) {
                     <span className="text-[9px] text-slate-500">{edges.length} branches</span>
                 </div>
             </div>
+
+            {/* Full-screen toggle */}
+            <button
+                onClick={() => setIsFullScreen(prev => !prev)}
+                className="absolute top-3 left-[140px] bg-slate-900/90 backdrop-blur-sm border border-slate-700 rounded-xl px-3 py-2 z-10 hover:bg-slate-800/90 transition-colors"
+                title={isFullScreen ? 'Exit full screen (Esc)' : 'Full screen'}
+            >
+                {isFullScreen ? <Minimize2 size={14} className="text-slate-300" /> : <Maximize2 size={14} className="text-slate-300" />}
+            </button>
 
             {/* Legend + instructions */}
             {legendItems.length > 0 && (
