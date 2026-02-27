@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Menu, X, MessageCircle, Shield, GitBranch,
+    Menu, X, MessageCircle, Shield, GitBranch, Lock, AlertTriangle,
     FileText, Bot, LayoutDashboard, Trophy, Share2, Terminal,
     Network, Brain, RefreshCw, Loader2, BookOpen, Clock,
 } from 'lucide-react';
@@ -108,6 +108,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
     const [licenseData, setLicenseData] = useState<any>(null);
     const [showLicenseWarning, setShowLicenseWarning] = useState(false);
     const [showLicenseBanner, setShowLicenseBanner] = useState(true);
+    const [licenseAcknowledged, setLicenseAcknowledged] = useState(false);
 
     // Comprehensive summary state
     const [projectSummary, setProjectSummary] = useState<string | null>(null);
@@ -131,6 +132,7 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
         setActiveFile(null);
         setSelectedFiles([]);
         setLicenseData(null);
+        setLicenseAcknowledged(false);
         setShowLicenseWarning(false);
         setShowLicenseBanner(true);
         setProjectSummary(null);
@@ -376,20 +378,26 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
             {/* ── Tab Bar ── */}
             <div className="h-11 border-b border-white/5 bg-[#0B1120]/60 backdrop-blur-sm flex items-center px-4 gap-1 overflow-x-auto shrink-0 scrollbar-none">
-                {tabs.map(tab => (
-                    <button
-                        key={tab.key}
-                        onClick={() => { setActiveTab(tab.key); setActiveFile(null); }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
-                            activeTab === tab.key
-                                ? 'bg-white/10 text-white'
-                                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-                        }`}
-                    >
-                        {tab.icon}
-                        {tab.label}
-                    </button>
-                ))}
+                {tabs.map(tab => {
+                    const isGated = (tab.key === 'contribute' || tab.key === 'agent') && licenseData?.warningLevel === 'danger';
+                    return (
+                        <button
+                            key={tab.key}
+                            onClick={() => { setActiveTab(tab.key); setActiveFile(null); }}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                                activeTab === tab.key
+                                    ? 'bg-white/10 text-white'
+                                    : isGated
+                                    ? 'text-red-400/60 hover:text-red-400 hover:bg-red-500/5'
+                                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                            }`}
+                        >
+                            {tab.icon}
+                            {tab.label}
+                            {isGated && <Lock size={10} className="text-red-400/60" />}
+                        </button>
+                    );
+                })}
             </div>
 
             {/* Copyleft license banner (warning level) */}
@@ -631,39 +639,129 @@ export default function RepositoryDashboard({ params }: { params: { owner: strin
 
                         {/* ── AGENT TAB ── */}
                         {activeTab === 'agent' && (
-                            <AutofixDashboard owner={owner} repo={repo} />
+                            licenseData?.warningLevel === 'danger' ? (
+                                <div className="glass-card rounded-2xl p-12 flex flex-col items-center gap-5 text-center">
+                                    <div className="w-20 h-20 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                                        <Lock size={32} className="text-red-400" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-white">AI Agent Locked</h3>
+                                    <p className="text-sm text-slate-400 max-w-md leading-relaxed">
+                                        This repository uses <span className="text-red-400 font-semibold">{licenseData?.name || 'a copyleft license'}</span> which
+                                        requires all derivative works to be released under the same license.
+                                        DevOne blocks autonomous contributions to protect you from accidental IP exposure.
+                                    </p>
+                                    <div className="flex flex-wrap gap-2 justify-center">
+                                        {(licenseData?.obligations || []).slice(0, 3).map((o: string, i: number) => (
+                                            <span key={i} className="text-[10px] px-2 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400">
+                                                {o}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={() => setShowLicenseWarning(true)}
+                                        className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs transition-colors"
+                                    >
+                                        View Full License Details
+                                    </button>
+                                </div>
+                            ) : licenseData?.warningLevel === 'warning' && !licenseAcknowledged ? (
+                                <div className="glass-card rounded-2xl p-12 flex flex-col items-center gap-5 text-center">
+                                    <div className="w-20 h-20 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center">
+                                        <AlertTriangle size={32} className="text-yellow-400" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-white">Proceed with Caution</h3>
+                                    <p className="text-sm text-slate-400 max-w-md leading-relaxed">
+                                        This repository has <span className="text-yellow-400 font-semibold">{licenseData?.name === 'No License' ? 'no license detected' : 'an unrecognized license'}</span>.
+                                        Under copyright law, all rights are reserved by the author.
+                                        Contributing without explicit permission may carry legal risk.
+                                    </p>
+                                    <button
+                                        onClick={() => setLicenseAcknowledged(true)}
+                                        className="px-5 py-2.5 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-semibold transition-colors"
+                                    >
+                                        I Understand the Risks — Continue
+                                    </button>
+                                </div>
+                            ) : (
+                                <AutofixDashboard owner={owner} repo={repo} />
+                            )
                         )}
 
                         {/* ── CONTRIBUTE TAB ── */}
                         {activeTab === 'contribute' && (
-                            <div className="space-y-6">
-                                {showDryRun && dryRunChallenge ? (
-                                    <DryRunPanel
-                                        owner={owner}
-                                        repo={repo}
-                                        filePath={dryRunChallenge.filePath || ''}
-                                        originalContent={dryRunChallenge.originalContent || ''}
-                                        newContent={dryRunChallenge.newContent || ''}
-                                        challengeId={dryRunChallenge.id}
-                                        onContribute={() => {
-                                            setShowDryRun(false);
-                                            setDryRunChallenge(null);
-                                        }}
-                                    />
-                                ) : (
-                                    <ContributeSandbox
-                                        owner={owner}
-                                        repo={repo}
-                                        suggestion={selectedChallenge ? {
-                                            title: selectedChallenge.title || '',
-                                            description: selectedChallenge.description || '',
-                                            files: selectedChallenge.files || [],
-                                            steps: selectedChallenge.steps || [],
-                                        } : null}
-                                        challengeId={selectedChallenge?.id}
-                                    />
-                                )}
-                            </div>
+                            licenseData?.warningLevel === 'danger' ? (
+                                <div className="glass-card rounded-2xl p-12 flex flex-col items-center gap-5 text-center">
+                                    <div className="w-20 h-20 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                                        <Lock size={32} className="text-red-400" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-white">Contributions Locked</h3>
+                                    <p className="text-sm text-slate-400 max-w-md leading-relaxed">
+                                        This repository uses <span className="text-red-400 font-semibold">{licenseData?.name || 'a copyleft license'}</span> which
+                                        requires all derivative works to be released under the same license.
+                                        DevOne blocks contributions to protect you from accidental IP exposure.
+                                    </p>
+                                    <div className="flex flex-wrap gap-2 justify-center">
+                                        {(licenseData?.obligations || []).slice(0, 3).map((o: string, i: number) => (
+                                            <span key={i} className="text-[10px] px-2 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-400">
+                                                {o}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <button
+                                        onClick={() => setShowLicenseWarning(true)}
+                                        className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs transition-colors"
+                                    >
+                                        View Full License Details
+                                    </button>
+                                </div>
+                            ) : licenseData?.warningLevel === 'warning' && !licenseAcknowledged ? (
+                                <div className="glass-card rounded-2xl p-12 flex flex-col items-center gap-5 text-center">
+                                    <div className="w-20 h-20 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center">
+                                        <AlertTriangle size={32} className="text-yellow-400" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-white">Proceed with Caution</h3>
+                                    <p className="text-sm text-slate-400 max-w-md leading-relaxed">
+                                        This repository has <span className="text-yellow-400 font-semibold">{licenseData?.name === 'No License' ? 'no license detected' : 'an unrecognized license'}</span>.
+                                        Under copyright law, all rights are reserved by the author.
+                                        Contributing without explicit permission may carry legal risk.
+                                    </p>
+                                    <button
+                                        onClick={() => setLicenseAcknowledged(true)}
+                                        className="px-5 py-2.5 rounded-xl bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-semibold transition-colors"
+                                    >
+                                        I Understand the Risks — Continue
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {showDryRun && dryRunChallenge ? (
+                                        <DryRunPanel
+                                            owner={owner}
+                                            repo={repo}
+                                            filePath={dryRunChallenge.filePath || ''}
+                                            originalContent={dryRunChallenge.originalContent || ''}
+                                            newContent={dryRunChallenge.newContent || ''}
+                                            challengeId={dryRunChallenge.id}
+                                            onContribute={() => {
+                                                setShowDryRun(false);
+                                                setDryRunChallenge(null);
+                                            }}
+                                        />
+                                    ) : (
+                                        <ContributeSandbox
+                                            owner={owner}
+                                            repo={repo}
+                                            suggestion={selectedChallenge ? {
+                                                title: selectedChallenge.title || '',
+                                                description: selectedChallenge.description || '',
+                                                files: selectedChallenge.files || [],
+                                                steps: selectedChallenge.steps || [],
+                                            } : null}
+                                            challengeId={selectedChallenge?.id}
+                                        />
+                                    )}
+                                </div>
+                            )
                         )}
 
                     </div>

@@ -55,7 +55,7 @@ export function LicenseWarningDialog({ license, open, onClose }: LicenseWarningD
                         </div>
                         <div>
                             <DialogTitle className={isDanger ? 'text-red-300' : 'text-yellow-300'}>
-                                {isDanger ? 'Restricted License' : 'Copyleft License'}
+                                {isDanger ? 'Copyleft License — Contributions Locked' : 'License Warning'}
                             </DialogTitle>
                             <DialogDescription className="mt-0.5">
                                 {license.name} {license.spdxId && <span className="font-mono text-slate-500">({license.spdxId})</span>}
@@ -187,7 +187,7 @@ export function LicenseBanner({ license, onDismiss }: { license: LicenseData | n
         <div className="mx-4 mt-2 flex items-center gap-3 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-200 text-sm">
             <AlertTriangle size={16} className="text-yellow-400 shrink-0" />
             <span className="flex-1">
-                <strong>{license.name}</strong> — {license.plainLanguage || 'Copyleft license. Derivative works must be shared under the same terms.'}
+                <strong>{license.name}</strong> — {license.plainLanguage || 'No license or unrecognized license detected. Proceed with caution.'}
             </span>
             {onDismiss && (
                 <button onClick={onDismiss} className="text-yellow-400 hover:text-yellow-300 text-xs font-medium shrink-0">
