@@ -9,7 +9,8 @@ import {
     ArrowRight, Languages, Sparkles, RotateCcw, Download
 } from 'lucide-react';
 import { GithubDiff, DiffLine } from '@/components/ui/github-inline-diff';
-import { useSession, signIn } from 'next-auth/react';
+import { useAuth } from '@/lib/hooks/use-auth';
+import { signInWithGitHub } from '@/lib/auth';
 import { TestSandbox } from '@/components/sandbox/test-sandbox';
 import { safePath } from '@/lib/path-utils';
 
@@ -79,7 +80,7 @@ const PR_STEPS = [
 ];
 
 export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCreated }: ContributeSandboxProps) {
-    const { data: session } = useSession();
+    const { user: session } = useAuth();
     const [activeTab, setActiveTab] = useState<'editor' | 'tests' | 'review'>('editor');
 
     // File state
@@ -91,10 +92,11 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
     // Editor state
     const [editorContent, setEditorContent] = useState(
         suggestion?.steps
-            ? `// Task: ${suggestion.title}\n// File: ${suggestion.files?.[0] || 'src/index.ts'}\n\n// Make your changes here...\n`
+            ? `// Task: ${suggestion.title}\n// File: ${suggestion.files?.[0] || 'src/index.ts'}\n\n// Generating solution...\n`
             : "// Select a file above or start editing here\n\nfunction main() {\n  console.log('Hello from DevOne!');\n}"
     );
     const [detectedLanguage, setDetectedLanguage] = useState('typescript');
+    const [generating, setGenerating] = useState(false);
 
     // Translation state
     const [targetLanguage, setTargetLanguage] = useState('');
@@ -136,6 +138,45 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const generateSolution = useCallback(async (fileContent: string, filePath: string) => {
+        if (!suggestion) return;
+        setGenerating(true);
+        try {
+            const prompt = `You are a code generator. Apply the following fix to the code below and return ONLY the complete modified file. Do NOT include any explanation, markdown fences, or commentary — output raw code only.
+
+TASK: ${suggestion.title}
+DESCRIPTION: ${suggestion.description}
+STEPS:
+${suggestion.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+FILE: ${filePath}
+ORIGINAL CODE:
+${fileContent}
+
+Return the complete modified file with the fix applied:`;
+
+            const res = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: prompt, owner, repo }),
+            });
+            const data = await res.json();
+            if (data.success && data.response) {
+                // Extract code from markdown fences if present
+                let code = data.response;
+                const fenceMatch = code.match(/```[\w]*\n([\s\S]*?)```/);
+                if (fenceMatch) {
+                    code = fenceMatch[1].trim();
+                }
+                setEditorContent(code);
+            }
+        } catch {
+            // Generation failed — user still has original content
+        } finally {
+            setGenerating(false);
+        }
+    }, [suggestion, owner, repo]);
+
     const loadFile = async (filePath: string) => {
         if (!filePath) return;
         setFileLoading(true);
@@ -151,6 +192,10 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
                 setEditorContent(data.content);
                 setSelectedFile(filePath);
                 setDetectedLanguage(getMonacoLanguage(filePath));
+                // Auto-generate solution if opened from a suggestion
+                if (suggestion) {
+                    generateSolution(data.content, filePath);
+                }
             }
         } catch {
             // File fetch failed
@@ -386,24 +431,34 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
                             </button>
                         </div>
 
-                        {/* Monaco Editor */}
-                        <MonacoEditor
-                            height="400px"
-                            language={detectedLanguage}
-                            theme="vs-dark"
-                            value={editorContent}
-                            onChange={(value) => setEditorContent(value || '')}
-                            options={{
-                                minimap: { enabled: false },
-                                fontSize: 13,
-                                lineNumbers: 'on',
-                                scrollBeyondLastLine: false,
-                                wordWrap: 'on',
-                                automaticLayout: true,
-                                padding: { top: 12 },
-                                renderLineHighlight: 'all',
-                            }}
-                        />
+                        {/* Monaco Editor + generating overlay */}
+                        <div className="relative">
+                            <MonacoEditor
+                                height="400px"
+                                language={detectedLanguage}
+                                theme="vs-dark"
+                                value={editorContent}
+                                onChange={(value) => setEditorContent(value || '')}
+                                options={{
+                                    minimap: { enabled: false },
+                                    fontSize: 13,
+                                    lineNumbers: 'on',
+                                    scrollBeyondLastLine: false,
+                                    wordWrap: 'on',
+                                    automaticLayout: true,
+                                    padding: { top: 12 },
+                                    renderLineHighlight: 'all',
+                                    readOnly: generating,
+                                }}
+                            />
+                            {generating && (
+                                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-10">
+                                    <Sparkles size={28} className="text-indigo-400 animate-pulse mb-3" />
+                                    <p className="text-sm font-semibold text-white mb-1">Generating solution...</p>
+                                    <p className="text-xs text-slate-400">AI is applying the fix to your code</p>
+                                </div>
+                            )}
+                        </div>
 
                         {/* Commit message bar */}
                         {commitMessage && (
@@ -462,7 +517,7 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
                                     <div className="pt-4 border-t border-slate-800 flex flex-col md:flex-row items-end md:items-center justify-end gap-4">
                                         {!session ? (
                                             <button
-                                                onClick={() => signIn('github')}
+                                                onClick={() => signInWithGitHub()}
                                                 className="bg-slate-700 hover:bg-slate-600 w-full md:w-auto text-white px-5 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors"
                                             >
                                                 Sign In to GitHub to Contribute
@@ -641,7 +696,7 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
                             </button>
                         ) : (
                             <button
-                                onClick={() => signIn('github')}
+                                onClick={() => signInWithGitHub()}
                                 className="px-3 py-2 text-sm font-medium rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors flex items-center gap-1.5"
                             >
                                 Sign In to Push
