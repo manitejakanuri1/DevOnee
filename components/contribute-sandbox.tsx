@@ -92,7 +92,8 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
     // Editor state
     const [editorContent, setEditorContent] = useState('');
     const [detectedLanguage, setDetectedLanguage] = useState('typescript');
-    const [generating, setGenerating] = useState(!!suggestion);
+    const [generating, setGenerating] = useState(false);
+    const [genError, setGenError] = useState<string | null>(null);
 
     // Translation state
     const [targetLanguage, setTargetLanguage] = useState('');
@@ -126,31 +127,15 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
         }
     }, [selectedFile]);
 
-    // Load file on initial suggestion
-    useEffect(() => {
-        if (suggestion?.files?.[0]) {
-            loadFile(suggestion.files[0]);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const generateSolution = useCallback(async (fileContent: string, filePath: string) => {
+    const generateSolution = useCallback(async (fileContent: string | null, filePath: string) => {
         if (!suggestion) return;
         setGenerating(true);
+        setGenError(null);
         try {
-            const prompt = `OUTPUT ONLY RAW CODE. NO markdown, NO backticks, NO explanation, NO comments about what you changed. Just the complete file content with the fix applied.
-
-Fix to apply:
-- ${suggestion.title}
-- ${suggestion.description}
-Steps: ${suggestion.steps.join('; ')}
-
-File: ${filePath}
---- ORIGINAL CODE START ---
-${fileContent}
---- ORIGINAL CODE END ---
-
-Output the entire fixed file now (raw code only, no wrapping):`;
+            const hasFile = fileContent && fileContent.length > 0;
+            const prompt = hasFile
+                ? `OUTPUT ONLY RAW CODE. No markdown fences, no backticks, no explanation, no prose. Return the complete modified file with the fix applied.\n\nFix: ${suggestion.title}\n${suggestion.description}\nSteps: ${suggestion.steps.join('; ')}\n\nFile (${filePath}):\n${fileContent}\n\nOutput the fixed file now:`
+                : `OUTPUT ONLY RAW CODE. No markdown fences, no backticks, no explanation, no prose. Write the complete implementation file.\n\nTask: ${suggestion.title}\n${suggestion.description}\nSteps: ${suggestion.steps.join('; ')}\n\nFile: ${filePath}\n\nWrite the complete code file now:`;
 
             const res = await fetch('/api/gemini', {
                 method: 'POST',
@@ -158,25 +143,24 @@ Output the entire fixed file now (raw code only, no wrapping):`;
                 body: JSON.stringify({ message: prompt, owner, repo }),
             });
             const data = await res.json();
-            if (data.success && data.response) {
-                let code = data.response;
-                // Strip markdown fences if AI included them
-                const fenceMatch = code.match(/```[\w]*\n([\s\S]*?)```/);
-                if (fenceMatch) {
-                    code = fenceMatch[1];
-                }
-                // Strip any leading prose lines before actual code
-                const lines = code.split('\n');
-                const codeStartIdx = lines.findIndex((l: string) =>
-                    /^(import |export |const |let |var |function |class |\/\/|\/\*|#|<|{|module|package |from |require|def |if |for |while |return |public |private |protected |using |namespace )/.test(l.trim()) || l.trim() === ''
-                );
-                if (codeStartIdx > 0) {
-                    code = lines.slice(codeStartIdx).join('\n');
-                }
-                setEditorContent(code.trim());
+
+            if (!data.success) {
+                setGenError(data.message || 'AI generation failed');
+                return;
             }
-        } catch {
-            // Generation failed — user still has original content
+
+            let code = data.response || '';
+            const fenceMatch = code.match(/```[\w]*\n([\s\S]*?)```/);
+            if (fenceMatch) code = fenceMatch[1];
+            code = code.trim();
+
+            if (code.length > 0) {
+                setEditorContent(code);
+            } else {
+                setGenError('AI returned empty response');
+            }
+        } catch (err: any) {
+            setGenError(err?.message || 'Failed to generate code');
         } finally {
             setGenerating(false);
         }
@@ -197,17 +181,29 @@ Output the entire fixed file now (raw code only, no wrapping):`;
                 setEditorContent(data.content);
                 setSelectedFile(filePath);
                 setDetectedLanguage(getMonacoLanguage(filePath));
-                // Auto-generate solution if opened from a suggestion
                 if (suggestion) {
                     generateSolution(data.content, filePath);
                 }
+            } else if (suggestion) {
+                setSelectedFile(filePath);
+                setDetectedLanguage(getMonacoLanguage(filePath));
+                generateSolution(null, filePath);
             }
         } catch {
-            // File fetch failed
+            if (suggestion) {
+                generateSolution(null, filePath);
+            }
         } finally {
             setFileLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (suggestion?.files?.[0]) {
+            loadFile(suggestion.files[0]);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleTranslate = async () => {
         if (!targetLanguage || !editorContent) return;
@@ -456,11 +452,30 @@ Output the entire fixed file now (raw code only, no wrapping):`;
                                     readOnly: generating,
                                 }}
                             />
-                            {generating && (
+                            {(generating || genError) && (
                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-10">
-                                    <Sparkles size={28} className="text-indigo-400 animate-pulse mb-3" />
-                                    <p className="text-sm font-semibold text-white mb-1">Generating solution...</p>
-                                    <p className="text-xs text-slate-400">AI is applying the fix to your code</p>
+                                    {generating ? (
+                                        <>
+                                            <Loader2 size={28} className="text-indigo-400 animate-spin mb-3" />
+                                            <p className="text-sm font-semibold text-white mb-1">Generating code...</p>
+                                            <p className="text-xs text-slate-400">AI is writing the solution</p>
+                                        </>
+                                    ) : genError ? (
+                                        <>
+                                            <AlertTriangle size={28} className="text-red-400 mb-3" />
+                                            <p className="text-sm font-semibold text-red-300 mb-1">Generation failed</p>
+                                            <p className="text-xs text-slate-400 mb-3 max-w-xs text-center">{genError}</p>
+                                            <button
+                                                onClick={() => {
+                                                    setGenError(null);
+                                                    generateSolution(originalContent || null, selectedFile);
+                                                }}
+                                                className="px-4 py-2 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center gap-1.5"
+                                            >
+                                                <RotateCcw size={12} /> Retry
+                                            </button>
+                                        </>
+                                    ) : null}
                                 </div>
                             )}
                         </div>
