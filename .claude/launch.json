@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "devone",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "cd", "C:\\Users\\manit\\hackthon\\Hackos2026", "&&", "npx", "next", "dev", "--port", "3098"],
+      "port": 3098
+    }
+  ]
+}
