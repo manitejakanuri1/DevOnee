@@ -33,13 +33,14 @@ export async function POST(req: NextRequest) {
         const supabase = createAdminClient();
         const repoFullName = `${owner}/${repo}`.toLowerCase();
 
-        // Get repo ID
-        const { data: repository } = await supabase
+        // Get repo ID (use limit(1) instead of single() to handle duplicates gracefully)
+        const { data: repos } = await supabase
             .from('repositories')
             .select('id')
             .eq('name', repoFullName)
-            .single();
+            .limit(1);
 
+        const repository = repos?.[0];
         if (!repository) {
             return NextResponse.json({ error: "Repository not indexed yet. Please index it first from the Overview tab." }, { status: 404 });
         }
