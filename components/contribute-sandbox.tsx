@@ -90,13 +90,9 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
     const [fileLoading, setFileLoading] = useState(false);
 
     // Editor state
-    const [editorContent, setEditorContent] = useState(
-        suggestion?.steps
-            ? `// Task: ${suggestion.title}\n// File: ${suggestion.files?.[0] || 'src/index.ts'}\n\n// Generating solution...\n`
-            : "// Select a file above or start editing here\n\nfunction main() {\n  console.log('Hello from DevOne!');\n}"
-    );
+    const [editorContent, setEditorContent] = useState('');
     const [detectedLanguage, setDetectedLanguage] = useState('typescript');
-    const [generating, setGenerating] = useState(false);
+    const [generating, setGenerating] = useState(!!suggestion);
 
     // Translation state
     const [targetLanguage, setTargetLanguage] = useState('');
@@ -142,18 +138,19 @@ export function ContributeSandbox({ owner, repo, suggestion, challengeId, onPrCr
         if (!suggestion) return;
         setGenerating(true);
         try {
-            const prompt = `You are a code generator. Apply the following fix to the code below and return ONLY the complete modified file. Do NOT include any explanation, markdown fences, or commentary — output raw code only.
+            const prompt = `OUTPUT ONLY RAW CODE. NO markdown, NO backticks, NO explanation, NO comments about what you changed. Just the complete file content with the fix applied.
 
-TASK: ${suggestion.title}
-DESCRIPTION: ${suggestion.description}
-STEPS:
-${suggestion.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+Fix to apply:
+- ${suggestion.title}
+- ${suggestion.description}
+Steps: ${suggestion.steps.join('; ')}
 
-FILE: ${filePath}
-ORIGINAL CODE:
+File: ${filePath}
+--- ORIGINAL CODE START ---
 ${fileContent}
+--- ORIGINAL CODE END ---
 
-Return the complete modified file with the fix applied:`;
+Output the entire fixed file now (raw code only, no wrapping):`;
 
             const res = await fetch('/api/gemini', {
                 method: 'POST',
@@ -162,13 +159,21 @@ Return the complete modified file with the fix applied:`;
             });
             const data = await res.json();
             if (data.success && data.response) {
-                // Extract code from markdown fences if present
                 let code = data.response;
+                // Strip markdown fences if AI included them
                 const fenceMatch = code.match(/```[\w]*\n([\s\S]*?)```/);
                 if (fenceMatch) {
-                    code = fenceMatch[1].trim();
+                    code = fenceMatch[1];
                 }
-                setEditorContent(code);
+                // Strip any leading prose lines before actual code
+                const lines = code.split('\n');
+                const codeStartIdx = lines.findIndex((l: string) =>
+                    /^(import |export |const |let |var |function |class |\/\/|\/\*|#|<|{|module|package |from |require|def |if |for |while |return |public |private |protected |using |namespace )/.test(l.trim()) || l.trim() === ''
+                );
+                if (codeStartIdx > 0) {
+                    code = lines.slice(codeStartIdx).join('\n');
+                }
+                setEditorContent(code.trim());
             }
         } catch {
             // Generation failed — user still has original content
