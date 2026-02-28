@@ -14,7 +14,7 @@ import {
     Loader2,
     Zap,
 } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/hooks/use-auth";
 
 interface DashboardStats {
     totalPRs: number;
@@ -35,7 +35,7 @@ interface Contribution {
 }
 
 export default function DashboardPage() {
-    const { data: session } = useSession();
+    const { user, session } = useAuth();
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [contributions, setContributions] = useState<Contribution[]>([]);
     const [xpData, setXpData] = useState<any>(null);
@@ -107,12 +107,12 @@ export default function DashboardPage() {
                         </a>
                         <h1 className="text-xl font-semibold">Dashboard</h1>
                     </div>
-                    {session?.user && (
+                    {user && (
                         <div className="flex items-center gap-3">
-                            <span className="text-sm text-slate-400">{session.user.name}</span>
-                            {session.user.image && (
+                            <span className="text-sm text-slate-400">{user.user_metadata?.full_name || user.user_metadata?.name || user.email}</span>
+                            {user.user_metadata?.avatar_url && (
                                 <img
-                                    src={session.user.image}
+                                    src={user.user_metadata.avatar_url}
                                     alt=""
                                     className="w-8 h-8 rounded-full border border-slate-700"
                                 />

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth-guard";
 import { createAdminClient } from "@/lib/supabase/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
+        const auth = await requireAuth();
+        if (!auth) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -72,7 +71,7 @@ Be realistic but encouraging. Most simple documentation or test changes should p
         if (repository) {
             await (supabase as any).from("dry_run_results").insert({
                 challenge_id: challengeId || null,
-                profile_id: session.user.id,
+                profile_id: auth.userId,
                 repository_id: repository.id,
                 original_content: (originalContent || "").substring(0, 10000),
                 new_content: newContent.substring(0, 10000),

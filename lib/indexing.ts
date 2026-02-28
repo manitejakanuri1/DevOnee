@@ -109,6 +109,15 @@ export async function indexRepository(owner: string, repo: string, jobId: string
         for (let i = 0; i < filesToProcess.length; i += batchSize) {
             const batch = filesToProcess.slice(i, i + batchSize);
 
+            // Update progress
+            jobStatusMap.set(jobId, {
+                status: 'processing',
+                progress: Math.round(((i) / filesToProcess.length) * 85),
+                processedFiles,
+                totalFiles: filesToProcess.length,
+                message: `Processing files ${i + 1}-${Math.min(i + batchSize, filesToProcess.length)} of ${filesToProcess.length}...`,
+            });
+
             await Promise.all(batch.map(async (file: any) => {
                 try {
                     const content = await fetchFileContent(owner, repo, file.path, defaultBranch);
@@ -141,6 +150,15 @@ export async function indexRepository(owner: string, repo: string, jobId: string
             }));
         }
 
+        // Mark file processing complete, starting DB insert
+        jobStatusMap.set(jobId, {
+            status: 'processing',
+            progress: 90,
+            processedFiles,
+            totalFiles: filesToProcess.length,
+            message: 'Saving embeddings to database...',
+        });
+
         if (allEmbeddingsToInsert.length > 0) {
             console.log(`[${jobId}] Batch inserting ${allEmbeddingsToInsert.length} embeddings to Supabase...`);
             // Insert in chunks of 100 to avoid request payload limits
@@ -155,10 +173,22 @@ export async function indexRepository(owner: string, repo: string, jobId: string
         }
 
         console.log(`[${jobId}] Indexing completed for ${repoFullName}`);
+        jobStatusMap.set(jobId, {
+            status: 'completed',
+            progress: 100,
+            processedFiles,
+            totalFiles: filesToProcess.length,
+            message: 'Indexing complete!',
+        });
         return { success: true, filesIndexed: processedFiles };
 
     } catch (error) {
         console.error(`[${jobId}] Indexing failed:`, error);
+        jobStatusMap.set(jobId, {
+            status: 'error',
+            progress: 0,
+            message: (error as any)?.message || 'Indexing failed',
+        });
         throw error;
     }
 }

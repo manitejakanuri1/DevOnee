@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth-guard";
 import { createAdminClient } from "@/lib/supabase/server";
 import {
     forkRepository,
@@ -14,15 +13,15 @@ import {
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
+        const auth = await requireAuth();
+        if (!auth) {
             return NextResponse.json(
                 { error: "UNAUTHORIZED: Please sign in to GitHub to commit a Pull Request." },
                 { status: 401 }
             );
         }
 
-        const token = (session as any).accessToken;
+        const token = auth.accessToken;
         if (!token) {
             return NextResponse.json(
                 { error: "No GitHub access token found. Please re-sign in." },
@@ -104,7 +103,7 @@ export async function POST(req: NextRequest) {
 
         if (repository) {
             await (supabase as any).from("contributions").insert({
-                profile_id: session.user.id,
+                profile_id: auth.userId,
                 repository_id: repository.id,
                 pr_url: pr.url,
                 status: "open",

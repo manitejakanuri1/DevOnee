@@ -15,7 +15,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY, type SimulationNodeDatum, type SimulationLinkDatum } from 'd3-force';
-import { Loader2, AlertCircle, Network, X, ExternalLink } from 'lucide-react';
+import { Loader2, AlertCircle, Network, X, ExternalLink, Search } from 'lucide-react';
 import { CustomFileNode, FolderGroupNode } from './custom-node';
 
 interface FlowchartViewProps {
@@ -242,6 +242,10 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [entryPointIds, setEntryPointIds] = useState<Set<string>>(new Set());
 
+    /* Search & filter */
+    const [searchQuery, setSearchQuery] = useState('');
+    const [activeTypeFilters, setActiveTypeFilters] = useState<Set<string>>(new Set());
+
     /* ── Fetch data ── */
     useEffect(() => {
         setLoading(true);
@@ -282,6 +286,21 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
             .finally(() => setLoading(false));
     }, [owner, repo, setNodes, setEdges]);
 
+    /* ── File nodes (non-folder) for search ── */
+    const fileNodes = useMemo(() => nodes.filter(n => n.type !== 'folder'), [nodes]);
+
+    /* ── Available file types for filter chips ── */
+    const availableTypes = useMemo(() => {
+        const types = new Map<string, number>();
+        fileNodes.forEach(n => {
+            const ft = (n.data as any)?.fileType || 'source';
+            types.set(ft, (types.get(ft) || 0) + 1);
+        });
+        return Array.from(types.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 8);
+    }, [fileNodes]);
+
     /* ── Connected-node set for focus mode ── */
     const connectedNodeIds = useMemo(() => {
         if (!selectedNodeId) return null;
@@ -292,6 +311,28 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
         });
         return s;
     }, [selectedNodeId, edges]);
+
+    /* ── Search/filter matched node IDs ── */
+    const searchMatchedIds = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        const hasTypeFilter = activeTypeFilters.size > 0;
+        if (!q && !hasTypeFilter) return null;
+
+        const matched = new Set<string>();
+        fileNodes.forEach(n => {
+            const d = n.data as any;
+            const label = (d?.label || '').toLowerCase();
+            const fullPath = (d?.fullPath || '').toLowerCase();
+            const purpose = (d?.purpose || '').toLowerCase();
+            const fileType = d?.fileType || '';
+
+            const matchesSearch = !q || label.includes(q) || fullPath.includes(q) || purpose.includes(q);
+            const matchesType = !hasTypeFilter || activeTypeFilters.has(fileType);
+
+            if (matchesSearch && matchesType) matched.add(n.id);
+        });
+        return matched;
+    }, [searchQuery, activeTypeFilters, fileNodes]);
 
     /* ── Selected node info for panel ── */
     const selectedInfo = useMemo(() => {
@@ -322,24 +363,25 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
         };
     }, [selectedNodeId, nodes, edges, entryPointIds]);
 
-    /* ── Styled nodes with focus state ── */
+    /* ── Styled nodes with focus + search state ── */
     const styledNodes = useMemo(() =>
         nodes.map(n => {
             if (n.type === 'folder') return n; // don't dim folder groups
             const isEntry = entryPointIds.has(n.id);
+            const focusDimmed = connectedNodeIds ? !connectedNodeIds.has(n.id) : false;
+            const searchDimmed = searchMatchedIds ? !searchMatchedIds.has(n.id) : false;
             return {
                 ...n,
                 data: {
                     ...n.data,
-                    dimmed: connectedNodeIds ? !connectedNodeIds.has(n.id) : false,
+                    dimmed: focusDimmed || searchDimmed,
                     active: selectedNodeId === n.id,
                     isEntry,
-                    // When nothing is selected, non-entry nodes get subtle shadow
-                    shadowed: !selectedNodeId && !isEntry,
+                    shadowed: !selectedNodeId && !isEntry && !searchQuery,
                 },
             };
         }),
-    [nodes, connectedNodeIds, selectedNodeId, entryPointIds]);
+    [nodes, connectedNodeIds, searchMatchedIds, selectedNodeId, entryPointIds, searchQuery]);
 
     /* ── Styled edges with focus state + arrowheads ── */
     const styledEdges = useMemo(() =>
@@ -375,9 +417,6 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
     }, []);
 
     const onPaneClick = useCallback(() => setSelectedNodeId(null), []);
-
-    /* file-only nodes for stats */
-    const fileNodes = useMemo(() => nodes.filter(n => n.type !== 'folder'), [nodes]);
 
     /* ── Loading ── */
     if (loading) {
@@ -484,6 +523,74 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
                 </div>
             </div>
 
+            {/* ── SEARCH + FILTER BAR ── */}
+            <div style={{
+                position: 'absolute', top: '49px', left: 0, right: 0, zIndex: 99,
+                background: 'rgba(10, 10, 15, 0.80)',
+                backdropFilter: 'blur(16px)',
+                borderBottom: '1px solid rgba(255,255,255,0.04)',
+                padding: '8px 20px',
+                display: 'flex', alignItems: 'center', gap: '10px',
+            }}>
+                <div style={{ position: 'relative', flex: '0 0 220px' }}>
+                    <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#555' }} />
+                    <input
+                        type="text"
+                        placeholder="Search files..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        style={{
+                            width: '100%', padding: '5px 10px 5px 30px',
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '8px', color: '#e8e8f0', fontSize: '11px',
+                            fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                            outline: 'none',
+                        }}
+                    />
+                </div>
+                <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', flex: 1 }}>
+                    {availableTypes.map(([type, count]) => {
+                        const isActive = activeTypeFilters.has(type);
+                        return (
+                            <button key={type} onClick={() => {
+                                setActiveTypeFilters(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(type)) next.delete(type); else next.add(type);
+                                    return next;
+                                });
+                            }} style={{
+                                padding: '2px 9px', borderRadius: '12px', fontSize: '10px',
+                                fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                                background: isActive ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.04)',
+                                border: isActive ? '1px solid rgba(129,140,248,0.6)' : '1px solid rgba(255,255,255,0.06)',
+                                color: isActive ? '#c7d2fe' : '#777',
+                                boxShadow: isActive ? '0 0 10px rgba(99,102,241,0.4), 0 0 20px rgba(99,102,241,0.15)' : 'none',
+                                cursor: 'pointer', transition: 'all 0.2s ease',
+                            }}>
+                                {type} ({count})
+                            </button>
+                        );
+                    })}
+                    {(searchQuery || activeTypeFilters.size > 0) && (
+                        <button onClick={() => { setSearchQuery(''); setActiveTypeFilters(new Set()); }}
+                            style={{
+                                padding: '2px 9px', borderRadius: '12px', fontSize: '10px',
+                                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
+                                color: '#f87171', cursor: 'pointer',
+                                fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
+                            }}>
+                            Clear
+                        </button>
+                    )}
+                </div>
+                {searchMatchedIds && (
+                    <span style={{ fontSize: '10px', color: '#666', fontFamily: "ui-monospace, 'JetBrains Mono', monospace", whiteSpace: 'nowrap' }}>
+                        {searchMatchedIds.size}/{fileNodes.length}
+                    </span>
+                )}
+            </div>
+
             {/* ── REACT FLOW ── */}
             <ReactFlow
                 nodes={styledNodes}
@@ -530,7 +637,7 @@ export function FlowchartView({ owner, repo, branch }: FlowchartViewProps) {
             {/* ── HINT (when nothing selected) ── */}
             {!selectedNodeId && (
                 <div style={{
-                    position: 'absolute', top: '54px', left: '50%', transform: 'translateX(-50%)',
+                    position: 'absolute', top: '92px', left: '50%', transform: 'translateX(-50%)',
                     background: 'rgba(99,102,241,0.1)',
                     border: '1px solid rgba(99,102,241,0.2)',
                     color: '#a5b4fc', padding: '6px 14px', borderRadius: '10px',

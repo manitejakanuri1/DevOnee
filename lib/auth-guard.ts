@@ -1,34 +1,32 @@
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { createServerSupabaseClient } from "@/lib/supabase/server-auth";
+import { createAdminClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 
 const GUEST_COOKIE_NAME = 'devone_guest_id';
 
 export interface UserIdentity {
-    userId: string;           // profile_id (auth) or guest_id (guest)
+    userId: string;
     isGuest: boolean;
-    profileId: string | null; // non-null only for authenticated users
-    guestId: string | null;   // non-null only for guests
+    profileId: string | null;
+    guestId: string | null;
 }
 
 /**
- * Get a stable user identity from NextAuth session or guest cookie.
- * The middleware.ts ensures every visitor gets a persistent guest cookie,
- * so this should always return a stable identifier.
+ * Get a stable user identity from Supabase Auth session or guest cookie.
  */
 export async function getUserIdentity(): Promise<UserIdentity> {
-    const session = await getServerSession(authOptions);
+    const supabase = createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (session?.user?.id) {
+    if (user) {
         return {
-            userId: session.user.id,
+            userId: user.id,
             isGuest: false,
-            profileId: session.user.id,
+            profileId: user.id,
             guestId: null,
         };
     }
 
-    // Fall back to guest cookie (set by middleware.ts)
     const cookieStore = cookies();
     const guestId = cookieStore.get(GUEST_COOKIE_NAME)?.value;
 
@@ -41,7 +39,6 @@ export async function getUserIdentity(): Promise<UserIdentity> {
         };
     }
 
-    // Fallback — should not happen if middleware is working
     const fallbackId = crypto.randomUUID();
     return {
         userId: fallbackId,
@@ -55,12 +52,22 @@ export async function getUserIdentity(): Promise<UserIdentity> {
  * Require an authenticated (non-guest) session.
  * Returns null if the user is not signed in.
  */
-export async function requireAuth(): Promise<{ session: any; userId: string; accessToken: string | null } | null> {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return null;
+export async function requireAuth(): Promise<{ userId: string; accessToken: string | null } | null> {
+    const supabase = createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return null;
+
+    // Get stored GitHub token from profiles
+    const admin = createAdminClient();
+    const { data: profile } = await admin
+        .from('profiles')
+        .select('github_token')
+        .eq('user_id', user.id)
+        .single();
+
     return {
-        session,
-        userId: session.user.id,
-        accessToken: (session as any).accessToken || null,
+        userId: user.id,
+        accessToken: profile?.github_token || null,
     };
 }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth-guard";
 import { createAdminClient } from "@/lib/supabase/server";
 import {
     forkRepository,
@@ -14,16 +13,15 @@ import {
 
 export async function POST(req: NextRequest) {
     try {
-        // Require authenticated session with GitHub token
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
+        const auth = await requireAuth();
+        if (!auth) {
             return NextResponse.json(
                 { error: "UNAUTHORIZED", message: "Please sign in with GitHub to create PRs." },
                 { status: 401 }
             );
         }
 
-        const token = (session as any).accessToken;
+        const token = auth.accessToken;
         if (!token) {
             return NextResponse.json(
                 { error: "NO_TOKEN", message: "No GitHub access token. Please re-sign in." },
@@ -74,9 +72,9 @@ ${issue.description}
 This PR applies an AI-generated fix to address the detected issue. Please review the changes carefully before merging.
 
 ---
-*🤖 Created by [DevOne](https://devone.vercel.app) — AI Contribution Agent*`;
+*Created by [DevOne](https://devone.vercel.app) — AI Contribution Agent*`;
 
-        // === 7-STEP PR PIPELINE (same as contribution/create) ===
+        // === 7-STEP PR PIPELINE ===
 
         // Step 1: Fork
         console.log(`[AutoFix] Step 1: Forking ${owner}/${repo}...`);
@@ -143,7 +141,7 @@ This PR applies an AI-generated fix to address the detected issue. Please review
 
         if (repository) {
             await supabase.from("contributions").insert({
-                profile_id: (session.user as any).id,
+                profile_id: auth.userId,
                 repository_id: repository.id,
                 pr_url: pr.url,
                 status: "open",

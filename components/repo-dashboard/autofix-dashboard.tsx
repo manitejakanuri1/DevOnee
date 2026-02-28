@@ -8,7 +8,7 @@ import {
     Settings, ChevronDown, ChevronUp, AlertCircle, Sparkles,
     RefreshCw, FileCode, XCircle,
 } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/lib/hooks/use-auth";
 import { AgentSuggestions } from "./agent-suggestions";
 import { ContributeSandbox } from "@/components/contribute-sandbox";
 
@@ -77,7 +77,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 // ── Component ──────────────────────────────────────────────────
 export function AutofixDashboard({ owner, repo, licenseLevel = 'info' }: AutofixDashboardProps) {
-    const { data: session } = useSession();
+    const { user: session } = useAuth();
     const [issues, setIssues] = useState<DetectedIssue[]>([]);
     const [loading, setLoading] = useState(true);
     const [scanning, setScanning] = useState(false);

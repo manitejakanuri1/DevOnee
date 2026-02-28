@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth-guard";
 import { createAdminClient } from "@/lib/supabase/server";
 
 function calculateLevel(xp: number): string {
@@ -19,8 +18,8 @@ function getNextLevelXP(xp: number): { next: string; xpNeeded: number; progress:
 
 export async function GET() {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
+        const auth = await requireAuth();
+        if (!auth) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -28,7 +27,7 @@ export async function GET() {
         const { data: profile } = await supabase
             .from("profiles")
             .select("xp_total, level, streak_days, last_contribution_date")
-            .eq("user_id", session.user.id)
+            .eq("user_id", auth.userId)
             .single();
 
         if (!profile) {
@@ -60,8 +59,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
+        const auth = await requireAuth();
+        if (!auth) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
@@ -86,7 +85,7 @@ export async function POST(req: NextRequest) {
         const { data: profile } = await supabase
             .from("profiles")
             .select("xp_total, streak_days, last_contribution_date")
-            .eq("user_id", session.user.id)
+            .eq("user_id", auth.userId)
             .single();
 
         const currentXP = profile?.xp_total || 0;
@@ -117,7 +116,7 @@ export async function POST(req: NextRequest) {
                 streak_days: newStreak,
                 last_contribution_date: today,
             })
-            .eq("user_id", session.user.id);
+            .eq("user_id", auth.userId);
 
         // Update contribution record
         if (contribution_id) {

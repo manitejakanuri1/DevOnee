@@ -1,21 +1,20 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useAuth } from "@/lib/hooks/use-auth";
 import { Trophy, Flame, Star, GitCommit, GitPullRequest, Code, CheckCircle, MapPin, Loader2, FolderGit2, Pencil, Check, X, Zap, ExternalLink } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function UserProfile() {
-    const { data: session, status } = useSession();
+    const { user, loading } = useAuth();
     const [repos, setRepos] = useState<any[]>([]);
     const [loadingRepos, setLoadingRepos] = useState(false);
     const [xpData, setXpData] = useState<any>(null);
     const [contributions, setContributions] = useState<any[]>([]);
 
     useEffect(() => {
-        if (!session) return;
+        if (!user) return;
 
-        // Fetch repos, XP, and contributions in parallel
         Promise.all([
             fetch('/api/repo/list').then(r => r.json()).catch(() => ({ success: false })),
             fetch('/api/user/xp').then(r => r.json()).catch(() => ({ success: false })),
@@ -29,9 +28,9 @@ export default function UserProfile() {
         }).finally(() => setLoadingRepos(false));
 
         setLoadingRepos(true);
-    }, [session]);
+    }, [user]);
 
-    if (status === "loading") {
+    if (loading) {
         return (
             <div className="min-h-screen bg-[#0f172a] flex items-center justify-center">
                 <Loader2 className="animate-spin text-blue-500" size={48} />
@@ -39,7 +38,7 @@ export default function UserProfile() {
         );
     }
 
-    if (!session) {
+    if (!user) {
         return (
             <div className="min-h-screen bg-[#0f172a] text-slate-50 flex flex-col items-center justify-center p-4">
                 <h1 className="text-3xl font-bold mb-4">You are not signed in.</h1>
@@ -48,7 +47,7 @@ export default function UserProfile() {
         );
     }
 
-    const userName = session.user?.name || "GitHub User";
+    const userName = user.user_metadata?.full_name || user.user_metadata?.name || "GitHub User";
     const userInitials = userName.substring(0, 2).toUpperCase();
 
     const achievements = [
@@ -62,8 +61,8 @@ export default function UserProfile() {
         <div className="min-h-screen bg-[#0f172a] text-slate-50 font-sans pb-20">
             <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md pt-20 pb-12">
                 <div className="max-w-5xl mx-auto px-6 flex flex-col md:flex-row items-center gap-8">
-                    {session.user?.image ? (
-                        <img src={session.user.image} alt="Profile" className="w-32 h-32 rounded-full border-4 border-slate-700 shadow-xl" />
+                    {user.user_metadata?.avatar_url ? (
+                        <img src={user.user_metadata.avatar_url} alt="Profile" className="w-32 h-32 rounded-full border-4 border-slate-700 shadow-xl" />
                     ) : (
                         <div className="w-32 h-32 rounded-full border-4 border-slate-700 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-4xl font-bold">
                             {userInitials}
@@ -71,7 +70,7 @@ export default function UserProfile() {
                     )}
                     <div className="text-center md:text-left flex-1">
                         <h1 className="text-4xl font-extrabold mb-2">{userName}</h1>
-                        <p className="text-slate-400 text-lg mb-6">{session.user?.email}</p>
+                        <p className="text-slate-400 text-lg mb-6">{user.email}</p>
 
                         <div className="flex flex-wrap justify-center md:justify-start gap-4">
                             <div className="flex items-center gap-2 bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700">

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth-guard";
 import { createAdminClient } from "@/lib/supabase/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
+        const auth = await requireAuth();
+        if (!auth) {
             return NextResponse.json({ success: false, error: "Unauthorized. Please sign in." }, { status: 401 });
         }
 
@@ -40,7 +39,6 @@ export async function POST(req: NextRequest) {
             .limit(1);
 
         if (existing && existing.length > 0) {
-            // Return existing challenges
             const { data: challenges } = await (supabase as any)
                 .from("challenges")
                 .select("*")
@@ -50,7 +48,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: true, challenges, cached: true });
         }
 
-        // Fetch repo context from embeddings
         const { data: chunks } = await supabase
             .from("embeddings")
             .select("content")
@@ -105,7 +102,6 @@ ${contextText.substring(0, 20000)}
         const parsed = JSON.parse(content);
         const challenges = parsed.challenges || [];
 
-        // Insert into database
         const insertData = challenges.map((c: any) => ({
             repository_id: repository.id,
             title: c.title,

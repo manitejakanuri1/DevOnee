@@ -1,56 +1,44 @@
-import GithubProvider from "next-auth/providers/github"
-import { SupabaseAdapter } from "@next-auth/supabase-adapter"
-import { createAdminClient } from "@/lib/supabase/server"
-import { NextAuthOptions } from "next-auth"
+import { createClient } from "@/lib/supabase/client"
 
-export const authOptions: NextAuthOptions = {
-    providers: [
-        GithubProvider({
-            clientId: process.env.GITHUB_ID || "",
-            clientSecret: process.env.GITHUB_SECRET || "",
-            authorization: { params: { scope: 'read:user user:email repo' } }
-        }),
-    ],
-    session: {
-        strategy: "jwt",
-    },
-    ...(process.env.NEXT_PUBLIC_SUPABASE_URL ? {
-        adapter: SupabaseAdapter({
-            url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-            secret: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        }),
-    } : {}),
-    callbacks: {
-        async signIn({ user }) {
-            const supabase = createAdminClient()
-            if (user) {
-                await supabase
-                    .from('profiles')
-                    .upsert({
-                        id: user.id,
-                        name: user.name,
-                        email: user.email,
-                        image: user.image,
-                        user_id: user.id
-                    } as any, { onConflict: 'id' });
-            }
-            return true;
+/**
+ * Sign in with GitHub via Supabase Auth.
+ * Call from client components — redirects to GitHub OAuth.
+ */
+export async function signInWithGitHub(redirectTo?: string) {
+    const supabase = createClient()
+    const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'github',
+        options: {
+            scopes: 'read:user user:email repo',
+            redirectTo: redirectTo || `${window.location.origin}/auth/callback`,
         },
-        async jwt({ token, account, user }) {
-            if (account) {
-                token.accessToken = account.access_token;
-            }
-            if (user) {
-                token.id = user.id;
-            }
-            return token;
-        },
-        async session({ session, token }: any) {
-            if (session?.user) {
-                session.user.id = token.id || token.sub;
-                session.accessToken = token.accessToken;
-            }
-            return session;
-        },
-    },
-};
+    })
+    if (error) throw error
+    return data
+}
+
+/**
+ * Sign out via Supabase Auth.
+ */
+export async function signOutUser() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+}
+
+/**
+ * Get the current session from Supabase Auth (client-side).
+ */
+export async function getSession() {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    return session
+}
+
+/**
+ * Get the GitHub provider token from the current session.
+ */
+export async function getGitHubToken(): Promise<string | null> {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.provider_token || null
+}

@@ -18,15 +18,23 @@ export async function POST(req: NextRequest) {
         }
 
         const jobId = `${owner}-${repo}-${Date.now()}`;
-        jobStatusMap.set(jobId, { status: "processing", progress: 0, message: "Started background process..." });
+        jobStatusMap.set(jobId, { status: "processing", progress: 0, processedFiles: 0, totalFiles: 0, message: "Starting indexing..." });
 
-        // Execute synchronous indexing process for local dev and standard Node
-        try {
-            const result = await indexRepository(owner, repo, jobId);
-            return NextResponse.json({ success: true, jobId, filesIndexed: result.filesIndexed });
-        } catch (err: any) {
-            return NextResponse.json({ error: "Indexing Failed", message: err.message }, { status: 500 });
-        }
+        // Fire-and-forget: start indexing in background, return jobId immediately for polling
+        indexRepository(owner, repo, jobId)
+            .then(result => {
+                console.log(`[${jobId}] Indexing completed: ${result.filesIndexed} files`);
+            })
+            .catch(err => {
+                console.error(`[${jobId}] Indexing failed:`, err);
+                jobStatusMap.set(jobId, {
+                    status: 'error',
+                    progress: 0,
+                    message: err.message || 'Indexing failed',
+                });
+            });
+
+        return NextResponse.json({ success: true, jobId, status: 'started' });
 
     } catch (err: any) {
         return NextResponse.json({ error: "Internal Server Error", message: err.message }, { status: 500 });

@@ -106,6 +106,11 @@ function RepositoryDashboard({ params }: { params: { owner: string; repo: string
     const [summaryError, setSummaryError] = useState<string | null>(null);
     const [summaryNeedsIndex, setSummaryNeedsIndex] = useState(false);
     const [indexingInProgress, setIndexingInProgress] = useState(false);
+    const [indexJobId, setIndexJobId] = useState<string | null>(null);
+    const [indexProgress, setIndexProgress] = useState(0);
+    const [indexMessage, setIndexMessage] = useState('Starting...');
+    const [indexProcessedFiles, setIndexProcessedFiles] = useState(0);
+    const [indexTotalFiles, setIndexTotalFiles] = useState(0);
 
     // Responsive panel state
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -221,8 +226,12 @@ function RepositoryDashboard({ params }: { params: { owner: string; repo: string
         setIndexingInProgress(true);
         setSummaryError(null);
         setSummaryNeedsIndex(false);
+        setIndexProgress(0);
+        setIndexMessage('Starting indexing...');
+        setIndexProcessedFiles(0);
+        setIndexTotalFiles(0);
+
         try {
-            // Step 1: Index the repository
             const indexRes = await fetch('/api/repo/index', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -234,29 +243,69 @@ function RepositoryDashboard({ params }: { params: { owner: string; repo: string
                 setIndexingInProgress(false);
                 return;
             }
-
-            // Step 2: Now generate the summary
-            setIndexingInProgress(false);
-            setSummaryLoading(true);
-            const sumRes = await fetch('/api/repo/summary', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ owner, repo, force: true })
-            });
-            const sumData = await sumRes.json();
-            if (sumData.success && sumData.summary) {
-                setProjectSummary(sumData.summary);
-                setSummaryGeneratedAt(sumData.generatedAt || null);
-            } else {
-                setSummaryError(sumData.message || 'Failed to generate summary.');
-            }
+            // Store jobId — polling effect will take over
+            setIndexJobId(indexData.jobId);
         } catch (err: any) {
             setSummaryError(err.message || 'Something went wrong.');
-        } finally {
             setIndexingInProgress(false);
-            setSummaryLoading(false);
         }
     };
+
+    // Poll indexing progress
+    useEffect(() => {
+        if (!indexJobId || !indexingInProgress) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/repo/index/status?jobId=${encodeURIComponent(indexJobId)}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                setIndexProgress(data.progress || 0);
+                setIndexMessage(data.message || 'Processing...');
+                setIndexProcessedFiles(data.processedFiles || 0);
+                setIndexTotalFiles(data.totalFiles || 0);
+
+                if (data.status === 'completed') {
+                    clearInterval(interval);
+                    setIndexProgress(100);
+                    setIndexMessage('Indexing complete!');
+
+                    // Now generate the summary
+                    setIndexingInProgress(false);
+                    setIndexJobId(null);
+                    setSummaryLoading(true);
+                    try {
+                        const sumRes = await fetch('/api/repo/summary', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ owner, repo, force: true })
+                        });
+                        const sumData = await sumRes.json();
+                        if (sumData.success && sumData.summary) {
+                            setProjectSummary(sumData.summary);
+                            setSummaryGeneratedAt(sumData.generatedAt || null);
+                        } else {
+                            setSummaryError(sumData.message || 'Failed to generate summary.');
+                        }
+                    } catch {
+                        setSummaryError('Failed to generate summary.');
+                    } finally {
+                        setSummaryLoading(false);
+                    }
+                } else if (data.status === 'error') {
+                    clearInterval(interval);
+                    setSummaryError(data.message || 'Indexing failed.');
+                    setIndexingInProgress(false);
+                    setIndexJobId(null);
+                }
+            } catch {
+                // Silently retry on network error
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [indexJobId, indexingInProgress, owner, repo]);
 
     const handleRegenerateSummary = async () => {
         setSummaryLoading(true);
@@ -526,14 +575,31 @@ function RepositoryDashboard({ params }: { params: { owner: string; repo: string
                                             {/* Indexing in progress */}
                                             {indexingInProgress ? (
                                                 <div className="space-y-4">
-                                                    <div className="flex items-center gap-3 text-sm text-slate-400">
+                                                    <div className="flex items-center gap-3 text-sm text-slate-300">
                                                         <Loader2 size={16} className="animate-spin text-purple-400" />
-                                                        Indexing repository files... This may take a minute.
+                                                        <span className="font-medium">{indexMessage}</span>
                                                     </div>
-                                                    <div className="space-y-3 animate-pulse">
-                                                        <div className="h-4 bg-purple-500/10 rounded w-full" />
-                                                        <div className="h-4 bg-purple-500/10 rounded w-5/6" />
-                                                        <div className="h-4 bg-purple-500/10 rounded w-4/6" />
+
+                                                    {/* Progress bar */}
+                                                    <div className="relative w-full h-3 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                                                        <div
+                                                            className="h-full rounded-full transition-all duration-500 ease-out"
+                                                            style={{
+                                                                width: `${indexProgress}%`,
+                                                                background: 'linear-gradient(90deg, #6366f1, #a855f7)',
+                                                                boxShadow: '0 0 12px rgba(99,102,241,0.4)',
+                                                            }}
+                                                        />
+                                                    </div>
+
+                                                    {/* Stats row */}
+                                                    <div className="flex items-center justify-between text-xs text-slate-500">
+                                                        <span>
+                                                            {indexProcessedFiles}/{indexTotalFiles || '?'} files processed
+                                                        </span>
+                                                        <span className="font-mono text-purple-400 font-bold">
+                                                            {indexProgress}%
+                                                        </span>
                                                     </div>
                                                 </div>
                                             ) : summaryLoading && !projectSummary ? (

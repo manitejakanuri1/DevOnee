@@ -7,7 +7,8 @@ import {
     Bug, FileText, TestTube, Rocket, RefreshCcw, Shield, Zap,
     Clock, ChevronRight, AlertTriangle,
 } from "lucide-react";
-import { useSession, signIn } from "next-auth/react";
+import { useAuth } from "@/lib/hooks/use-auth";
+import { signInWithGitHub } from "@/lib/auth";
 
 interface Suggestion {
     id: string;
@@ -54,7 +55,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export function AgentSuggestions({ owner, repo, licenseLevel, onAccept }: AgentSuggestionsProps) {
-    const { data: session } = useSession();
+    const { user } = useAuth();
     const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -93,10 +94,6 @@ export function AgentSuggestions({ owner, repo, licenseLevel, onAccept }: AgentS
 
     const handleAccept = (suggestion: Suggestion) => {
         if (licenseLevel === "danger") return;
-        if (!session) {
-            signIn("github");
-            return;
-        }
         onAccept(suggestion);
     };
 
@@ -239,13 +236,6 @@ export function AgentSuggestions({ owner, repo, licenseLevel, onAccept }: AgentS
                                         className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-semibold cursor-not-allowed"
                                     >
                                         <Lock size={10} /> License Restricted
-                                    </button>
-                                ) : !session ? (
-                                    <button
-                                        onClick={() => signIn("github")}
-                                        className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-[10px] font-semibold transition-colors"
-                                    >
-                                        <LogIn size={10} /> Sign in to Start
                                     </button>
                                 ) : (
                                     <button

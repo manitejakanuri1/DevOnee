@@ -618,10 +618,63 @@ function fileImportance(filePath: string): number {
     return score;
 }
 
+// ── Aggregate stats for each directory from file-level data ──
+function aggregateFolderStats(
+    allFiles: string[],
+    contentMap: Map<string, string>,
+    fileSizeMap: Map<string, number>,
+    edgeList: { id: string; source: string; target: string }[],
+): Map<string, { totalLines: number; importCount: number; importedByCount: number; fileCount: number }> {
+    const stats = new Map<string, { totalLines: number; importCount: number; importedByCount: number; fileCount: number }>();
+
+    for (const f of allFiles) {
+        const dir = path.posix.dirname(f);
+        if (dir === '.') continue;
+        if (!stats.has(dir)) stats.set(dir, { totalLines: 0, importCount: 0, importedByCount: 0, fileCount: 0 });
+        const s = stats.get(dir)!;
+        s.fileCount++;
+
+        const content = contentMap.get(f);
+        if (content) {
+            s.totalLines += content.split('\n').length;
+        } else {
+            const size = fileSizeMap.get(f);
+            if (size) s.totalLines += Math.max(1, Math.round(size / 30));
+        }
+    }
+
+    // Roll up nested folders (deepest first)
+    const sortedDirs = Array.from(stats.keys()).sort((a, b) => b.split('/').length - a.split('/').length);
+    for (const dir of sortedDirs) {
+        const parent = path.posix.dirname(dir);
+        if (parent !== '.' && stats.has(parent)) {
+            const p = stats.get(parent)!;
+            const c = stats.get(dir)!;
+            p.totalLines += c.totalLines;
+            p.fileCount += c.fileCount;
+        }
+    }
+
+    // Cross-folder import counts
+    for (const edge of edgeList) {
+        const sourceDir = path.posix.dirname(edge.source);
+        const targetDir = path.posix.dirname(edge.target);
+        if (sourceDir !== targetDir) {
+            if (stats.has(sourceDir)) stats.get(sourceDir)!.importCount++;
+            if (stats.has(targetDir)) stats.get(targetDir)!.importedByCount++;
+        }
+    }
+
+    return stats;
+}
+
 // ── Build folder-structure graph as fallback ──
 function buildFolderGraph(
     allFiles: string[],
-    maxNodes: number = 60
+    maxNodes: number = 60,
+    contentMap?: Map<string, string>,
+    fileSizeMap?: Map<string, number>,
+    edgeList?: { id: string; source: string; target: string }[],
 ): { nodes: any[]; edges: any[] } {
     const dirs = new Map<string, string[]>();
 
@@ -635,6 +688,11 @@ function buildFolderGraph(
     const edges: any[] = [];
     const nodeIds = new Set<string>();
 
+    // Compute aggregated folder stats if data is available
+    const folderStats = (contentMap && fileSizeMap && edgeList)
+        ? aggregateFolderStats(allFiles, contentMap, fileSizeMap, edgeList)
+        : null;
+
     // Sort by depth, add as directory nodes
     const sortedDirs = Array.from(dirs.keys())
         .filter(d => d !== '.')
@@ -644,7 +702,8 @@ function buildFolderGraph(
     for (const dir of sortedDirs) {
         const parts = dir.split('/');
         const { type: fileType, color } = getNodeType(dir + '/');
-        const fileCount = dirs.get(dir)?.length || 0;
+        const dirStats = folderStats?.get(dir);
+        const fileCount = dirStats?.fileCount ?? (dirs.get(dir)?.length || 0);
 
         nodes.push({
             id: dir,
@@ -656,7 +715,12 @@ function buildFolderGraph(
                 color,
                 isFolder: true,
                 fileCount,
-                lines: 0,
+                lines: dirStats?.totalLines ?? 0,
+                imports: dirStats?.importCount ?? 0,
+                importedBy: dirStats?.importedByCount ?? 0,
+                purpose: dirStats
+                    ? `Folder — ${fileCount} files, ${dirStats.totalLines.toLocaleString()} lines${dirStats.importCount ? `, ${dirStats.importCount} ext imports` : ''}`
+                    : `Folder — ${fileCount} files`,
             },
             position: { x: 0, y: 0 },
         });
@@ -880,7 +944,7 @@ export async function POST(req: NextRequest) {
             finalEdges = edgeList.filter(e => selectedSet.has(e.source) && selectedSet.has(e.target));
         } else {
             // No imports resolved — fall back to folder structure
-            const folderGraph = buildFolderGraph(allFiles);
+            const folderGraph = buildFolderGraph(allFiles, 60, contentMap, fileSizeMap, edgeList);
             finalNodes = folderGraph.nodes;
             finalEdges = folderGraph.edges;
             mode = 'structure';

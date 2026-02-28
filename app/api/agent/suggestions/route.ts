@@ -4,8 +4,6 @@ import { getUserIdentity } from "@/lib/auth-guard";
 import { checkAndIncrementUsage } from "@/lib/usage";
 import { analyzePersona } from "@/lib/persona";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 
 function simpleHash(str: string): number {
     let hash = 0;
@@ -69,8 +67,13 @@ export async function POST(req: NextRequest) {
         // Determine user persona
         let persona = "Junior Developer";
         if (!identity.isGuest) {
-            const session = await getServerSession(authOptions);
-            const githubName = (session?.user as any)?.name || owner;
+            const adminDb = createAdminClient();
+            const { data: profile } = await adminDb
+                .from('profiles')
+                .select('name')
+                .eq('user_id', identity.userId)
+                .single();
+            const githubName = profile?.name || owner;
             persona = await analyzePersona(githubName);
         }
 

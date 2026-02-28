@@ -1,22 +1,23 @@
 "use client"
 
-import { signIn, signOut, useSession } from "next-auth/react"
+import { useAuth } from "@/lib/hooks/use-auth"
+import { signInWithGitHub, signOutUser } from "@/lib/auth"
 
 export function NavbarAuthButton() {
-    const { data: session, status } = useSession()
+    const { user, loading } = useAuth()
 
-    if (status === "loading") {
+    if (loading) {
         return <div className="text-sm font-medium text-slate-500 animate-pulse">Loading...</div>
     }
 
-    if (session) {
+    if (user) {
         return (
             <div className="flex items-center gap-4">
                 <span className="text-sm font-medium text-slate-300">
-                    {session.user?.name || session.user?.email}
+                    {user.user_metadata?.full_name || user.user_metadata?.name || user.email}
                 </span>
                 <button
-                    onClick={() => signOut()}
+                    onClick={() => signOutUser().then(() => window.location.reload())}
                     className="text-sm font-medium text-slate-400 hover:text-white transition-colors"
                 >
                     Sign Out
@@ -27,7 +28,7 @@ export function NavbarAuthButton() {
 
     return (
         <button
-            onClick={() => signIn("github", { callbackUrl: "/dashboard" })}
+            onClick={() => signInWithGitHub()}
             className="text-sm font-medium text-slate-300 hover:text-white transition-colors"
         >
             Sign In with GitHub

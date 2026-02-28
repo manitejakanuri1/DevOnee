@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth-guard";
 import { createAdminClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
+        const auth = await requireAuth();
+        if (!auth) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const token = (session as any).accessToken;
+        const token = auth.accessToken;
         if (!token) {
             return NextResponse.json({ error: "No GitHub token" }, { status: 401 });
         }
@@ -27,7 +26,7 @@ export async function POST(req: NextRequest) {
             .from("contributions")
             .select("*")
             .eq("id", contribution_id)
-            .eq("profile_id", session.user.id)
+            .eq("profile_id", auth.userId)
             .single();
 
         if (!contribution || !contribution.pr_url) {
@@ -73,7 +72,7 @@ export async function POST(req: NextRequest) {
             .from("contributions")
             .update({ status })
             .eq("id", contribution_id)
-            .eq("profile_id", session.user.id);
+            .eq("profile_id", auth.userId);
 
         return NextResponse.json({
             success: true,
