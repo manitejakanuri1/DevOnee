@@ -9,8 +9,21 @@ import {
     RefreshCw, FileCode, XCircle,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { AgentSuggestions } from "./agent-suggestions";
+import { ContributeSandbox } from "@/components/contribute-sandbox";
 
 // ── Types ──────────────────────────────────────────────────────
+interface Suggestion {
+    id: string;
+    title: string;
+    description: string;
+    files: string[];
+    steps: string[];
+    impact: "low" | "medium" | "high";
+    category: string;
+    estimated_effort: string;
+}
+
 interface DetectedIssue {
     id: string;
     issue_type: "bug" | "lint" | "security" | "performance" | "test_failure";
@@ -28,6 +41,7 @@ interface DetectedIssue {
 interface AutofixDashboardProps {
     owner: string;
     repo: string;
+    licenseLevel?: string;
 }
 
 // ── Config ─────────────────────────────────────────────────────
@@ -62,7 +76,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 // ── Component ──────────────────────────────────────────────────
-export function AutofixDashboard({ owner, repo }: AutofixDashboardProps) {
+export function AutofixDashboard({ owner, repo, licenseLevel = 'info' }: AutofixDashboardProps) {
     const { data: session } = useSession();
     const [issues, setIssues] = useState<DetectedIssue[]>([]);
     const [loading, setLoading] = useState(true);
@@ -72,6 +86,10 @@ export function AutofixDashboard({ owner, repo }: AutofixDashboardProps) {
     const [applyingId, setApplyingId] = useState<string | null>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Suggestion sandbox state
+    const [activeSuggestion, setActiveSuggestion] = useState<Suggestion | null>(null);
+    const [showSandbox, setShowSandbox] = useState(false);
 
     // Fetch existing issues on mount
     const fetchIssues = useCallback(async () => {
@@ -203,8 +221,59 @@ export function AutofixDashboard({ owner, repo }: AutofixDashboardProps) {
     const fixedCount = issues.filter((i) => i.status === "fixed").length;
     const prCount = issues.filter((i) => i.status === "pr_created").length;
 
+    // If sandbox is open for an accepted suggestion
+    if (showSandbox && activeSuggestion) {
+        return (
+            <div className="space-y-4">
+                <button
+                    onClick={() => { setShowSandbox(false); setActiveSuggestion(null); }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs transition-colors"
+                >
+                    ← Back to Agent
+                </button>
+                <div className="glass-card rounded-2xl p-4">
+                    <div className="mb-3">
+                        <h4 className="text-sm font-bold text-white">{activeSuggestion.title}</h4>
+                        <p className="text-[10px] text-slate-400 mt-1">{activeSuggestion.description}</p>
+                        {activeSuggestion.steps.length > 0 && (
+                            <ol className="mt-2 space-y-1">
+                                {activeSuggestion.steps.map((step, i) => (
+                                    <li key={i} className="text-[10px] text-slate-500 flex gap-2">
+                                        <span className="text-indigo-400 font-bold">{i + 1}.</span>
+                                        {step}
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
+                    </div>
+                </div>
+                <ContributeSandbox
+                    owner={owner}
+                    repo={repo}
+                    suggestion={{
+                        title: activeSuggestion.title,
+                        description: activeSuggestion.description,
+                        files: activeSuggestion.files,
+                        steps: activeSuggestion.steps,
+                    }}
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4">
+            {/* ── PERSONALIZED SUGGESTIONS ── */}
+            <AgentSuggestions
+                owner={owner}
+                repo={repo}
+                licenseLevel={licenseLevel}
+                onAccept={(suggestion) => {
+                    setActiveSuggestion(suggestion);
+                    setShowSandbox(true);
+                }}
+            />
+
             {/* Header */}
             <div className="glass-card rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-4">

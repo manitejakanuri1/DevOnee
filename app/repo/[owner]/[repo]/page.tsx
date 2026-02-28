@@ -672,7 +672,7 @@ function RepositoryDashboard({ params }: { params: { owner: string; repo: string
                                     </button>
                                 </div>
                             ) : (
-                                <AutofixDashboard owner={owner} repo={repo} />
+                                <AutofixDashboard owner={owner} repo={repo} licenseLevel={licenseData?.warningLevel || 'info'} />
                             )
                         )}
 
